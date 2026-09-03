@@ -3,6 +3,13 @@ main = "src/index.js"
 compatibility_date = "2025-06-01"
 workers_dev = true
 
+# Reader-facing custom domain (join pages, unsubscribe + approve links, embed.js).
+# wrangler creates the DNS record in the jacobsiler.com zone on deploy.
+# To stay on workers.dev instead: delete this block and set PUBLIC_URL below to the workers.dev URL.
+routes = [
+  { pattern = "go.ink.jacobsiler.com", custom_domain = true }
+]
+
 # Runs every 5 minutes: scheduled sends, welcome sequences, nudges, 48h reports.
 [triggers]
 crons = ["*/5 * * * *"]
@@ -16,7 +23,7 @@ INK_FROM_DOMAIN = "mail.ink.jacobsiler.com"
 # Where the app lives (links in nudge emails)
 APP_URL = "https://ink.jacobsiler.com"
 # This Worker's public URL (join pages, unsubscribe links, approve links). Use a custom route if you add one.
-PUBLIC_URL = "https://ink-worker.jacobdsiler.workers.dev"
+PUBLIC_URL = "https://go.ink.jacobsiler.com"
 
 # Secrets — set with `wrangler secret put NAME`:
 #   FIREBASE_SERVICE_ACCOUNT  (the whole service-account JSON, one line)

@@ -312,8 +312,9 @@ async function countActive(db, uid) {
   // cheap-ish count for status refresh (pages of 1000)
   let n = 0, last = null;
   for (let i = 0; i < 20; i++) {
-    const rows = await db.query(`authors/${uid}`, 'subscribers', { where: [['status', '==', 'active']], orderBy: [['__name__', 'asc']], limit: 1000, startAfter: last ? [last] : undefined });
-    n += rows.length; if (rows.length < 1000) break; last = { referenceValue: rows[rows.length - 1]._name };
+    // no status filter in the query: equality + __name__ ordering would need a composite index
+    const rows = await db.query(`authors/${uid}`, 'subscribers', { orderBy: [['__name__', 'asc']], limit: 1000, startAfter: last ? [last] : undefined });
+    n += rows.filter(r => r.status === 'active').length; if (rows.length < 1000) break; last = { referenceValue: rows[rows.length - 1]._name };
   }
   return n;
 }
@@ -415,9 +416,9 @@ async function runSendJob(env, db, uid, cid, maxBatches = 8) {
     const batch = [];
     let exhausted = false;
     while (batch.length < 100 && !exhausted) {
-      const rows = await db.query(`authors/${uid}`, 'subscribers', { where: [['status', '==', 'active']], orderBy: [['__name__', 'asc']], limit: 200, startAfter: job.cursor ? [{ referenceValue: job.cursor }] : undefined });
+      const rows = await db.query(`authors/${uid}`, 'subscribers', { orderBy: [['__name__', 'asc']], limit: 200, startAfter: job.cursor ? [{ referenceValue: job.cursor }] : undefined });
       if (!rows.length) { exhausted = true; break; }
-      for (const s of rows) { if (batch.length < 100 && segmentMatch(s, campaign.segment)) batch.push(s); job.cursor = s._name; if (batch.length >= 100) break; }
+      for (const s of rows) { if (batch.length < 100 && s.status === 'active' && segmentMatch(s, campaign.segment)) batch.push(s); job.cursor = s._name; if (batch.length >= 100) break; }
       if (rows.length < 200 && batch.length < 100) exhausted = true;
     }
     if (batch.length) {
@@ -497,7 +498,7 @@ async function aiDraft(env, author, { templateId, purpose, brief, tone, subjectH
 }
 
 async function statsSummary(db, uid) {
-  const campaigns = await db.query(`authors/${uid}`, 'campaigns', { where: [['status', '==', 'sent']], orderBy: [['sentAt', 'desc']], limit: 12 });
+  const campaigns = (await db.query(`authors/${uid}`, 'campaigns', { orderBy: [['sentAt', 'desc']], limit: 40 })).filter(c => c.status === 'sent').slice(0, 12);
   const days = await db.query(`authors/${uid}`, 'metricsDaily', { orderBy: [['__name__', 'desc']], limit: 90 });
   const lines = campaigns.map(c => {
     const s = c.stats || {}; const r = s.sent || 1;

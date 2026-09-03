@@ -50,7 +50,7 @@ npx wrangler secret put GEMINI_API_KEY
 npx wrangler secret put INK_SIGNING_SECRET         # e.g. openssl rand -base64 48
 npx wrangler deploy
 ```
-Check `PUBLIC_URL` in `wrangler.toml` matches the deployed URL (or add a route like `ink-api.jacobsiler.com`), and `WORKER` at the top of `index.html` matches too. The cron (`*/5 * * * *`) is registered on deploy.
+Check ``wrangler.toml` binds the Worker to the custom domain `go.ink.jacobsiler.com` (wrangler creates the DNS record in your Cloudflare zone on deploy); `PUBLIC_URL` there and `WORKER` at the top of `index.html` must match it. The cron (`*/5 * * * *`) is registered on deploy.
 
 ### 5. Publish the app
 Double-click `deploy.cmd` (edit `COMMIT_MESSAGE.txt` first): it adds, commits and pushes, deploys the Firestore rules, and deploys the Worker. Or push to GitHub manually; Pages serves `index.html` at ink.jacobsiler.com. Sign in, complete onboarding, add your postal address (required in every marketing email), and import your existing list (MailerLite export CSV works as-is).

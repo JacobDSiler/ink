@@ -241,7 +241,7 @@
     <button class="btn btn-ghost btn-block" onclick="ink.signUpEmail()">Create an account</button>
     <button class="btn btn-ghost btn-sm" onclick="ink.resetPassword()">Forgot password?</button>
     <div class="err" id="auth-err"></div>
-    <p class="dim small" style="margin-top:1.5rem">Your list, your readers, your voice.<br>Ink never sends anything without your approval.</p>
+    <p class="dim small" style="margin-top:1.5rem">Your reader list, owned by you. Letters drafted in your voice, on a schedule Ink keeps for you — and nothing is ever sent without your approval.</p><p class="dim small" style="margin-top:.75rem">Publishing on Folio? Bring your subscribers across in one import.</p><p class="dim small" style="margin-top:.75rem;font-size:.75rem">By continuing you confirm you have permission to email the readers you import. Every letter carries an unsubscribe link.</p>
   </div>
 </div>
 
@@ -283,16 +283,17 @@
    ═══════════════════════════════════════════════════════════════════════ */
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, signOut } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
-import { getFirestore, doc, collection, getDoc, getDocs, setDoc, updateDoc, deleteDoc, onSnapshot, query, where, orderBy, limit, writeBatch, arrayUnion } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+import { getFirestore, doc, collection, getDoc, getDocs, setDoc, updateDoc, deleteDoc, onSnapshot, query, where, orderBy, limit, startAfter, writeBatch, arrayUnion } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
-const WORKER = 'https://ink-worker.jacobdsiler.workers.dev';
+const WORKER = 'https://go.ink.jacobsiler.com';   // Ink Worker (custom domain, see worker/wrangler.toml)
+const PUBLIC = () => (S.me && S.me.publicUrl) || WORKER;  // base for join / unsubscribe links
 const firebaseConfig = { apiKey: "AIzaSyDxLI57pgS9WX1ekMerbcx8M6aVeWacpy0", authDomain: "auth.jacobsiler.com", projectId: "miscellaneous-117e9", storageBucket: "miscellaneous-117e9.firebasestorage.app", messagingSenderId: "514858431339", appId: "1:514858431339:web:8b3acbe89966b45fe3922e" };
 const fb = initializeApp(firebaseConfig);
 const auth = getAuth(fb);
 const db = getFirestore(fb);
 const T = InkTemplates, R = InkRender;
 
-const S = { user: null, author: null, campaigns: [], plans: [], suggestions: [], welcome: null, subs: null, metrics: [], unsub: [], view: '', joinUrl: '' };
+const S = { me: null, user: null, author: null, campaigns: [], plans: [], suggestions: [], welcome: null, subs: null, metrics: [], unsub: [], view: '', joinUrl: '' };
 const $ = (id) => document.getElementById(id);
 const esc = R.escapeHtml;
 const nowIso = () => new Date().toISOString();
@@ -372,6 +373,7 @@ onAuthStateChanged(auth, async (user) => {
 
 function startApp() {
   $('app').classList.add('visible');
+  api('/me').then(m => { S.me = m; }).catch(() => { });
   S.unsub.push(onSnapshot(aDoc(), s => { S.author = s.data() || {}; $('brand-sub').textContent = S.author.penName || 'Author mailer'; if (S.view === 'dashboard' || S.view === 'settings') render(); }));
   S.unsub.push(onSnapshot(query(aCol('campaigns'), orderBy('updatedAt', 'desc'), limit(300)), s => { S.campaigns = s.docs.map(d => ({ id: d.id, ...d.data() })); if (['dashboard', 'campaigns', 'analytics', 'campaign', 'plan'].includes(S.view)) render(); }));
   S.unsub.push(onSnapshot(query(aCol('plans'), orderBy('createdAt', 'desc'), limit(50)), s => { S.plans = s.docs.map(d => ({ id: d.id, ...d.data() })); if (['dashboard', 'plan'].includes(S.view)) render(); }));
@@ -388,23 +390,23 @@ function renderOnboarding(existing) {
   const a = existing || {};
   $('main').innerHTML = `
   <div class="wizard fade">
-    <div style="text-align:center;margin-bottom:1.5rem"><div class="ornament">✦ ✦ ✦</div><h1 style="margin:.5rem 0">Welcome to Ink</h1><p class="muted">Five minutes of setup, then Ink does the remembering.</p></div>
+    <div style="text-align:center;margin-bottom:1.5rem"><div class="ornament">✦ ✦ ✦</div><h1 style="margin:.5rem 0">Welcome to Ink</h1><p class="muted">Five minutes of setup, then Ink keeps your reader list warm for you.</p></div>
     <div class="card"><div class="card-head"><span class="g">✍</span><h3>You, the author</h3></div><div class="card-body">
-      <div class="row"><div><label>Pen name</label><input type="text" id="ob-pen" value="${esc(a.penName || '')}" placeholder="e.g. J.D. Siler"></div>
-      <div><label>Genre <span class="hint">(what readers would call it)</span></label><input type="text" id="ob-genre" value="${esc(a.genre || '')}" placeholder="e.g. steampunk literary fantasy"></div></div>
+      <div class="row"><div><label>Pen name</label><input type="text" id="ob-pen" value="${esc(a.penName || '')}" placeholder="The name on your books"></div>
+      <div><label>Genre <span class="hint">(what readers would call it)</span></label><input type="text" id="ob-genre" value="${esc(a.genre || '')}" placeholder="e.g. cosy mystery, epic fantasy, YA sci-fi"></div></div>
       <label>Your sign-up address <span class="hint">(letters, numbers, hyphens)</span></label>
-      <div class="inline"><span class="dim small">${esc(WORKER)}/join/</span><input type="text" id="ob-slug" value="${esc(a.slug || '')}" placeholder="jd-siler" style="max-width:220px"></div>
+      <div class="inline"><span class="dim small">${esc(PUBLIC().replace(/^https?:\/\//, ''))}/join/</span><input type="text" id="ob-slug" value="${esc(a.slug || '')}" placeholder="your-pen-name" style="max-width:220px"></div>
       <label>Reply-to email <span class="hint">(where reader replies land)</span></label><input type="email" id="ob-reply" value="${esc(a.replyTo || S.user.email || '')}">
-      <label>Postal address <span class="hint">(required by anti-spam law in every marketing email — a PO box is fine)</span></label><input type="text" id="ob-addr" value="${esc(a.postalAddress || '')}" placeholder="e.g. JAZ Games, PO Box 123, Mullingar, Co. Westmeath, Ireland">
+      <label>Postal address <span class="hint">(required by anti-spam law in every marketing email — a PO box is fine)</span></label><input type="text" id="ob-addr" value="${esc(a.postalAddress || '')}" placeholder="e.g. Your Press, PO Box 123, Your Town, Country">
       <label>Website</label><input type="url" id="ob-web" value="${esc(a.webUrl || '')}" placeholder="https://">
     </div></div>
     <div class="card"><div class="card-head"><span class="g">❧</span><h3>Your voice</h3></div><div class="card-body">
       <label>How you write to readers <span class="hint">(Ink's ghostwriter follows this closely)</span></label>
-      <textarea id="ob-voice" placeholder="e.g. Warm, quiet, a little wry. Short paragraphs. I talk about the writing life and the world of the books, never hype. I sign off 'Warmly, J.D.'">${esc(a.voice || '')}</textarea>
+      <textarea id="ob-voice" placeholder="e.g. Warm and conversational, a little wry. Short paragraphs. I talk about the writing life and the world of the books, never hype. I sign off 'Warmly, [first name]'.">${esc(a.voice || '')}</textarea>
       <label>About you <span class="hint">(a sentence or two)</span></label>
       <textarea id="ob-bio" style="min-height:60px">${esc(a.bio || '')}</textarea>
       <label>Your books <span class="hint">(one per line: Title | Series | status | link)</span></label>
-      <textarea id="ob-books" placeholder="Embers of Elekra | Sky Bridge Saga | published | https://…&#10;Resonance | Sky Bridge Saga | coming 2026 |">${esc((a.books || []).map(b => [b.title, b.series, b.status, b.link].join(' | ')).join('\n'))}</textarea>
+      <textarea id="ob-books" placeholder="The First Book | Series Name | published | https://…&#10;The Second Book | Series Name | coming 2027 |">${esc((a.books || []).map(b => [b.title, b.series, b.status, b.link].join(' | ')).join('\n'))}</textarea>
     </div></div>
     <div class="card"><div class="card-head"><span class="g">◷</span><h3>Rhythm</h3></div><div class="card-body">
       <div class="row"><div><label>Timezone</label><input type="text" id="ob-tz" value="${esc(a.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone)}"></div>
@@ -413,7 +415,7 @@ function renderOnboarding(existing) {
       <div class="toggle-row"><div><b>Welcome series</b><div class="small muted">Three pre-written welcome letters go to every new reader over a week. You can edit them any time.</div></div><label class="toggle"><input type="checkbox" id="ob-welcome" checked><span class="s"></span></label></div>
     </div></div>
     <div class="msg msg-error" id="ob-err"></div>
-    <button class="btn btn-primary btn-block" id="ob-go" onclick="ink.finishOnboarding()">Open my Ink room</button>
+    <button class="btn btn-primary btn-block" id="ob-go" onclick="ink.finishOnboarding()">Open Ink</button>
   </div>`;
 }
 function parseBooks(text) { return text.split('\n').map(l => l.trim()).filter(Boolean).map(l => { const [title, series, status, link] = l.split('|').map(s => (s || '').trim()); return { title, series, status, link }; }).filter(b => b.title); }
@@ -475,6 +477,15 @@ function renderDashboard() {
   const sugg = S.suggestions.slice(0, 4);
   const drafts = S.campaigns.filter(c => c.status === 'draft').slice(0, 3);
   const scheduled = S.campaigns.filter(c => c.status === 'scheduled' || c.status === 'sending');
+  const starting = !(a.subscriberCount > 0) || !sent.length;
+  const checklist = starting ? `<div class="card"><div class="card-head"><span class="g">❧</span><h3>Getting started</h3></div><div class="card-body">
+    ${[[a.postalAddress, 'Add your postal address', 'Required in the footer of every marketing email.', '#settings'],
+       [a.subscriberCount > 0, 'Bring your readers in', 'Import a CSV from Folio, MailerLite, Mailchimp or Substack — or share your sign-up page.', '#readers'],
+       [S.welcome && S.welcome.enabled, 'Switch on the welcome series', 'Three letters every new reader gets automatically. Already written; edit to taste.', '#automations'],
+       [sent.length > 0, 'Send your first letter', 'Give Ink two sentences and it drafts the rest in your voice.', '#compose/monthly-letter'],
+       [S.plans.some(p => p.status === 'active'), 'Start a plan', 'Ink keeps the schedule, drafts each letter early, and asks you to approve.', '#plan']]
+      .map(([done, t, d, h]) => `<div class="list-item"><div style="width:1.4em;color:${done ? 'var(--moss)' : 'var(--parch-dim)'};font-size:1.1rem">${done ? '✓' : '○'}</div><div class="main"><div class="title" style="${done ? 'text-decoration:line-through;opacity:.6' : ''}">${t}</div><div class="sub">${d}</div></div>${done ? '' : `<a class="btn btn-sm" href="${h}">Go</a>`}</div>`).join('')}
+  </div></div>` : '';
   $('main').innerHTML = `
   ${head(`Good ${new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 18 ? 'afternoon' : 'evening'}, ${esc(a.penName || '')}`, `${new Date().toLocaleDateString('en-IE', { weekday: 'long', day: 'numeric', month: 'long' })}`,
     `<a class="btn btn-primary" href="#compose/monthly-letter">✍ Draft a letter</a><a class="btn" href="#readers">Add readers</a>`)}
@@ -484,6 +495,7 @@ function renderDashboard() {
     <div class="tile"><div class="l">Avg open rate</div><div class="v">${sent.length ? Math.round(h.openRate * 100) + '%' : '—'}</div><div class="d">last ${Math.min(3, sent.length) || '—'} letters · benchmark 35%+</div></div>
     <div class="tile"><div class="l">List health</div><div class="v" style="color:${h.score >= 70 ? '#a8d8a4' : h.score >= 40 ? 'var(--brass-light)' : '#f0a080'}">${h.score}</div><div class="health"><i style="width:${h.score}%;background:${h.score >= 70 ? 'var(--moss)' : h.score >= 40 ? 'var(--brass)' : 'var(--ember)'}"></i></div></div>
   </div>
+  ${checklist}
   <div class="grid grid-2">
     <div>
       <div class="card"><div class="card-head"><span class="g">✓</span><h3>Needs your approval</h3><div class="right"><a class="btn btn-sm btn-ghost" href="#approvals">All</a></div></div><div class="card-body">
@@ -574,7 +586,7 @@ function renderCampaign(id) {
   <div class="editor">
     <div>
       ${locked ? '' : `<div class="ai-bar"><h3>✦ Ask Ink to write it</h3>
-        <textarea id="ed-brief" rows="3" placeholder="What do you want to say? Two sentences is plenty — e.g. 'Book 2 is drafted. The cove scene finally works. Mention the Kickstarter is coming in October.'">${esc(c.brief || '')}</textarea>
+        <textarea id="ed-brief" rows="3" placeholder="What do you want to say? Two sentences is plenty — e.g. 'Book two is drafted and the ending finally works. Mention the pre-order opens next month.'">${esc(c.brief || '')}</textarea>
         <div class="row" style="margin-top:.5rem"><div><label>Tone</label><select id="ed-tone"><option value="">In my usual voice</option><option>warm and story-rich</option><option>quietly exciting — something is building</option><option>reflective and personal</option><option>worldbuilding deep-dive</option><option>gentle urgency — now is a good moment</option><option>short and plain</option></select></div>
         <div class="auto"><button class="btn btn-primary" id="ed-gen" onclick="ink.aiDraft('${id}',this)">${c.body && c.body.length > 200 ? 'Rewrite from my brief' : 'Write the draft'}</button></div></div>
         <div class="small dim" style="margin-top:.4rem">Ink writes from your profile, your books, and the template. You edit; Ink never sends.</div></div>`}
@@ -712,7 +724,7 @@ function renderPlanDetail(p) {
 }
 ink.newPlanModal = (pre) => {
   modal(`<h2>New plan</h2>
-  <div class="ai-bar"><h3>✦ Let Ink choose</h3><textarea id="np-goal" rows="2" placeholder="e.g. 'Resonance launches on Kickstarter 14 October — build to a strong first 48 hours' or 'just keep my list warm'"></textarea><div class="row" style="margin-top:.5rem"><div><label>Key date <span class="hint">(optional)</span></label><input type="date" id="np-goal-date"></div><div class="auto"><button class="btn btn-primary" onclick="ink.aiPlan(this)">Suggest a plan</button></div></div></div>
+  <div class="ai-bar"><h3>✦ Let Ink choose</h3><textarea id="np-goal" rows="2" placeholder="e.g. 'My new book releases on 14 October — build to a strong launch week' or 'just keep my list warm'"></textarea><div class="row" style="margin-top:.5rem"><div><label>Key date <span class="hint">(optional)</span></label><input type="date" id="np-goal-date"></div><div class="auto"><button class="btn btn-primary" onclick="ink.aiPlan(this)">Suggest a plan</button></div></div></div>
   <div class="divider">or pick a playbook</div>
   <label>Playbook</label><select id="np-pb" onchange="ink.npPbChanged()">${T.PLAYBOOKS.map(pb => `<option value="${pb.id}" ${pre === pb.id ? 'selected' : ''}>${esc(pb.name)}</option>`).join('')}</select>
   <div class="small muted" id="np-desc" style="margin-top:.4rem"></div>
@@ -749,19 +761,28 @@ ink.draftPlanItem = async (planId, itemId, btn) => {
 };
 
 /* ═══════════════════════════ READERS ═══════════════════════════ */
-async function loadSubs(force) { if (S.subs && !force) return S.subs; const snap = await getDocs(query(aCol('subscribers'), limit(20000))); S.subs = snap.docs.map(d => ({ id: d.id, ...d.data() })); return S.subs; }
+async function loadSubs(force) {
+  if (S.subs && !force) return S.subs;
+  const out = []; let last = null;
+  for (let i = 0; i < 40; i++) {
+    const q = last ? query(aCol('subscribers'), orderBy('__name__'), startAfter(last), limit(5000)) : query(aCol('subscribers'), orderBy('__name__'), limit(5000));
+    const snap = await getDocs(q); snap.docs.forEach(d => out.push({ id: d.id, ...d.data() }));
+    if (snap.docs.length < 5000) break; last = snap.docs[snap.docs.length - 1];
+  }
+  S.subs = out; return S.subs;
+}
 function allTags() { const t = new Set(); (S.subs || []).forEach(s => (s.tags || []).forEach(x => t.add(x))); return [...t].sort(); }
 let readersFilter = { q: '', status: 'active', tag: '' };
 async function renderReaders() {
   $('main').innerHTML = `${head('Readers', 'Your list, owned by you. Export it any time.', `<button class="btn btn-primary" onclick="ink.addReaderModal()">＋ Add</button><button class="btn" onclick="ink.importModal()">Import CSV</button><button class="btn" onclick="ink.exportCsv()">Export</button>`)}<div class="empty">Loading readers…</div>`;
   await loadSubs(); if (S.view !== 'readers') return;
-  const a = S.author || {}; const joinUrl = a.slug ? `${WORKER}/join/${a.slug}` : '';
+  const a = S.author || {}; const joinUrl = a.slug ? `${PUBLIC()}/join/${a.slug}` : '';
   const counts = { active: 0, pending: 0, unsubscribed: 0, bounced: 0, complained: 0 }; S.subs.forEach(s => counts[s.status] = (counts[s.status] || 0) + 1);
   $('main').innerHTML = `${head('Readers', 'Your list, owned by you. Export it any time.', `<button class="btn btn-primary" onclick="ink.addReaderModal()">＋ Add</button><button class="btn" onclick="ink.importModal()">Import CSV</button><button class="btn" onclick="ink.exportCsv()">Export</button>`)}
   <div class="tiles"><div class="tile"><div class="l">Active</div><div class="v cav">${counts.active.toLocaleString()}</div></div><div class="tile"><div class="l">Awaiting confirmation</div><div class="v">${counts.pending}</div></div><div class="tile"><div class="l">Unsubscribed</div><div class="v">${counts.unsubscribed}</div></div><div class="tile"><div class="l">Bounced / complained</div><div class="v">${counts.bounced + counts.complained}</div></div></div>
   <div class="card"><div class="card-head"><span class="g">❧</span><h3>Grow the list</h3></div><div class="card-body">
     ${joinUrl ? `<div class="row"><div><label>Your sign-up page</label><div class="inline"><input type="text" readonly value="${esc(joinUrl)}" onclick="this.select()"><a class="btn btn-sm auto" href="${esc(joinUrl)}" target="_blank" rel="noopener">Open</a></div></div></div>
-    <label>Embed a form on your site <span class="hint">(paste where the form should appear)</span></label><pre class="code" onclick="ink.selectAll(this)">&lt;div data-ink-join="${esc(a.slug)}" data-ink-tags="website" data-ink-button="Join the list"&gt;&lt;/div&gt;\n&lt;script src="${esc(WORKER)}/embed.js" async&gt;&lt;/script&gt;</pre>
+    <label>Embed a form on your site <span class="hint">(paste where the form should appear)</span></label><pre class="code" onclick="ink.selectAll(this)">&lt;div data-ink-join="${esc(a.slug)}" data-ink-tags="website" data-ink-button="Join the list"&gt;&lt;/div&gt;\n&lt;script src="${esc(PUBLIC())}/embed.js" async&gt;&lt;/script&gt;</pre>
     <div class="small dim">Add <code>?tags=kickstarter</code> to the sign-up link to tag readers by where they came from.</div>` : `<div class="empty">Set your sign-up address in <a href="#settings">Settings</a> to get a hosted join page and an embeddable form.</div>`}
   </div></div>
   <div class="card"><div class="card-head"><h3>List</h3><div class="right"><input type="text" id="rd-q" placeholder="Search name or email" value="${esc(readersFilter.q)}" style="width:200px;padding:.35rem .6rem" oninput="ink.readersFilter()"><select id="rd-status" style="width:auto;padding:.35rem 2rem .35rem .6rem" onchange="ink.readersFilter()">${['active', 'pending', 'unsubscribed', 'bounced', 'complained', 'all'].map(s => `<option value="${s}" ${readersFilter.status === s ? 'selected' : ''}>${s}</option>`).join('')}</select><select id="rd-tag" style="width:auto;padding:.35rem 2rem .35rem .6rem" onchange="ink.readersFilter()"><option value="">any tag</option>${allTags().map(t => `<option ${readersFilter.tag === t ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select></div></div>
@@ -810,7 +831,7 @@ function parseCsv(text) {
 }
 ink.importRun = async (btn) => {
   hideMsg('im-err'); hideMsg('im-ok'); const rows = parseCsv($('im-text').value); if (!rows.length) return showMsg('im-err', 'Nothing to import.');
-  const head = rows[0].map(h => h.trim().toLowerCase()); let ei = head.findIndex(h => h.includes('email')); let ni = head.findIndex(h => h === 'name' || h.includes('first') || h === 'full name'); let li = head.findIndex(h => h.includes('last'));
+  const head = rows[0].map(h => h.trim().toLowerCase()); let ei = head.findIndex(h => h.includes('email') || h === 'e-mail'); let ni = head.findIndex(h => h === 'name' || h === 'full name' || h === 'subscriber' || h.includes('first')); let li = head.findIndex(h => h.includes('last name') || h === 'last' || h === 'surname');
   let data = rows; if (ei < 0) { ei = rows[0].findIndex(c => c.includes('@')); ni = ei === 0 ? 1 : 0; li = -1; } else data = rows.slice(1);
   const tags = $('im-tags').value.split(',').map(t => t.trim()).filter(Boolean); const status = $('im-active').checked ? 'active' : 'pending';
   busy(btn, true, 'Importing');
@@ -896,7 +917,7 @@ function renderSettings() {
   </div><div>
     <div class="card"><div class="card-head"><span class="g">✉</span><h3>Sending</h3></div><div class="card-body">
       <div class="row"><div><label>From name</label><input type="text" id="st-from" value="${esc(a.fromName || a.penName || '')}"></div><div><label>From address <span class="hint">(before the @)</span></label><input type="text" id="st-local" value="${esc(a.fromLocal || a.slug || '')}"></div></div>
-      <div class="small dim" style="margin-top:.4rem">Readers see: <b style="color:var(--parch-mid)">${esc(a.fromName || a.penName || '')} &lt;${esc(a.fromLocal || a.slug || 'you')}@${cd?.status === 'verified' ? esc(cd.domain) : 'mail.ink.jacobsiler.com'}&gt;</b></div>
+      <div class="small dim" style="margin-top:.4rem">Readers see: <b style="color:var(--parch-mid)">${esc(a.fromName || a.penName || '')} &lt;${esc(a.fromLocal || a.slug || 'you')}@${cd?.status === 'verified' ? esc(cd.domain) : esc((S.me && S.me.fromDomain) || 'ink')}&gt;</b></div>
       <label>Reply-to</label><input type="email" id="st-reply" value="${esc(a.replyTo || '')}">
       <label>Sign-up address</label><div class="inline"><span class="dim small">/join/</span><input type="text" id="st-slug" value="${esc(a.slug || '')}" style="max-width:220px"><button class="btn btn-sm auto" onclick="ink.saveSlug(this)">Update</button></div>
       <div class="toggle-row" style="margin-top:1rem"><div><b>Double opt-in</b><div class="small muted">New readers confirm by email first.</div></div><label class="toggle"><input type="checkbox" id="st-doi" ${a.doubleOptIn ? 'checked' : ''}><span class="s"></span></label></div>
@@ -905,14 +926,14 @@ function renderSettings() {
     </div></div>
     <div class="card"><div class="card-head"><span class="g">⚑</span><h3>Your own sending domain <span class="dim small">(optional)</span></h3></div><div class="card-body">
       ${cd ? `<div><b>${esc(cd.domain)}</b> — <span class="status ${cd.status === 'verified' ? 'active' : 'pending'}">${cd.status}</span></div>${cd.status !== 'verified' ? `<p class="small muted" style="margin-top:.5rem">Add these DNS records at your registrar, then verify:</p><div class="tbl-wrap"><table><thead><tr><th>Type</th><th>Name</th><th>Value</th></tr></thead><tbody>${(cd.records || []).map(r => `<tr><td>${esc(r.type)}</td><td class="code" style="font-size:.75rem">${esc(r.name)}</td><td class="code" style="font-size:.75rem;word-break:break-all">${esc(r.value)}</td></tr>`).join('')}</tbody></table></div>` : ''}<div class="actions" style="margin-top:.75rem"><button class="btn btn-sm" onclick="ink.verifyDomain(this)">Check verification</button><button class="btn btn-sm btn-danger" onclick="ink.removeDomain(this)">Remove</button></div>` :
-      `<p class="small muted">Send from your own domain (e.g. <code>news.skybridgesaga.com</code>) for the best deliverability and brand. Until it is verified, Ink sends from its shared domain with your name and reply-to.</p><div class="row"><div><input type="text" id="st-domain" placeholder="news.yourdomain.com"></div><div class="auto"><button class="btn" onclick="ink.addDomain(this)">Set up</button></div></div>`}
+      `<p class="small muted">Send from your own domain (e.g. <code>news.yourname.com</code>) for the best deliverability and brand. Until it is verified, Ink sends from its shared domain with your name and reply-to.</p><div class="row"><div><input type="text" id="st-domain" placeholder="news.yourdomain.com"></div><div class="auto"><button class="btn" onclick="ink.addDomain(this)">Set up</button></div></div>`}
       <div class="msg msg-error" id="st-dom-err"></div>
     </div></div>
     <div class="card"><div class="card-head"><span class="g">❧</span><h3>Email look</h3></div><div class="card-body">
       <div class="row"><div><label>Accent</label><input type="text" id="st-b-accent" value="${esc(b.accent)}"></div><div><label>Headings</label><input type="text" id="st-b-heading" value="${esc(b.heading)}"></div><div><label>Background</label><input type="text" id="st-b-bg" value="${esc(b.bg)}"></div></div>
       <label>Join page headline</label><input type="text" id="st-jh" value="${esc(a.joinHeadline || '')}" placeholder="Join ${esc(a.penName || '')}'s readers"><label>Join page blurb</label><textarea id="st-jb" style="min-height:60px">${esc(a.joinBlurb || '')}</textarea>
     </div></div>
-    <div class="card"><div class="card-body small dim">Signed in as ${esc(S.user.email)}. Worker: <code>${esc(WORKER)}</code></div></div>
+    <div class="card"><div class="card-body small dim">Signed in as ${esc(S.user.email)}.</div></div>
   </div></div><div class="msg msg-error" id="st-err"></div>`;
 }
 ink.saveSettings = async (btn) => {
