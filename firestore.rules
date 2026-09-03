@@ -1,25 +1,779 @@
+// Combined rules for Boxes app + Folio Projects app + Ink
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // Each author owns their own subtree. Everything else is Worker-only (service account).
-    match /authors/{uid} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
-
-      match /{collection}/{doc} {
-        allow read, write: if request.auth != null && request.auth.uid == uid;
+    /* ---------------------------------------------------------
+     * BOXES APP
+     * --------------------------------------------------------- */
+    match /boxes/{boxId} {
+      allow read, write: if true;
+      match /items/{itemId} {
+        allow read, write: if true;
       }
-      match /campaigns/{cid}/recipients/{sid} {
-        allow read: if request.auth != null && request.auth.uid == uid;
-        allow write: if false; // Worker only
+      match /vault/{vaultId} {
+        allow read, write: if true;
+      }
+      match /signaling/{sigId} {
+        allow read, write: if true;
+        match /{subCol}/{subDoc} {
+          allow read, write: if true;
+        }
       }
     }
+    match /_ping/{doc} {
+      allow read, write: if true;
+    }
+// ───────────────────────────────────────────────────────────────────
+// Folio — Firestore security rules
+// ───────────────────────────────────────────────────────────────────
+// Verified against the app's actual Firestore access patterns (every
+// _fb.* call site in app.html) during the launch-readiness audit.
+// See docs/LAUNCH-READINESS.md → "Applying these rules" for how to
+// publish + test these in the Firebase console.
+//
+// All collections are owner-gated except where public read is needed
+// (published folios, their body, presence, and annotations). The
+// subscribers subcollection is locked down too — its unsubscribe link
+// now flows through the folio-email worker's /unsubscribe endpoint,
+// which uses a service account (IAM) rather than browser auth.
+// ───────────────────────────────────────────────────────────────────
+    // request.auth.uid == uid, with the null-auth guard built in.
+    function isUser(uid) {
+      return request.auth != null && uid != null && request.auth.uid == uid;
+    }
+    // Admin check — Folio platform operators. Two-layer allowlist:
+    //   (1) Bootstrap uids hardcoded in source (safety net if role docs
+    //       are ever deleted, and lets a fresh install still have an
+    //       admin without pre-seeding data).
+    //   (2) Dynamic uids in /folio_roles/{uid}.roles array = ['admin']
+    //       — grantable via /admin/admins/ page.
+    function isAdmin() {
+      return request.auth != null && (
+        request.auth.uid in [
+          'x9AgFZ7O8WVz2UVtyO4ggWKNfc73',  // Jacob — bootstrap admin (primary)
+          'Y1bO4mc8aAclkbRNIYXyez8i7Rj2'   // Jacob — bootstrap admin (secondary account)
+        ]
+        || (
+          exists(/databases/$(database)/documents/folio_roles/$(request.auth.uid))
+          && 'admin' in get(/databases/$(database)/documents/folio_roles/$(request.auth.uid)).data.roles
+        )
+      );
+    }
+    // Moderator check — narrower role for shelf content approval only.
+    // Admin is a superset (admins are always moderators).
+    function isModerator() {
+      return isAdmin() || (
+        request.auth != null
+        && exists(/databases/$(database)/documents/folio_roles/$(request.auth.uid))
+        && 'moderator' in get(/databases/$(database)/documents/folio_roles/$(request.auth.uid)).data.roles
+      );
+    }
+    // The parent folio_projects doc for a subcollection rule.
+    function parentDoc(id) {
+      return get(/databases/$(database)/documents/folio_projects/$(id));
+    }
+    function parentUid(id) {
+      let d = parentDoc(id);
+      return d != null ? d.data.uid : null;
+    }
+    function parentPublished(id) {
+      let d = parentDoc(id);
+      return d != null
+        && d.data.release != null
+        && d.data.release.published == true;
+    }
+    // Does this folio have a release object at all? Historical helper;
+    // kept for other rules that still key off "has this been released."
+    function parentHasRelease(id) {
+      let d = parentDoc(id);
+      return d != null && d.data.release != null;
+    }
+    // Anyone who is allowed to SEE this folio. Per-doc GET is
+    // permission-free — the folio ID (13-digit timestamp + 6-char base36
+    // suffix, ~10^10 combinations) IS the credential. This means:
+    //   • Beta / editor / reader share links work on pure drafts, before
+    //     any "release" has been created. Author generates a share URL,
+    //     hands it to a reader, reader opens it — no publish step
+    //     required first. Aligned with the mental model that generating
+    //     a share URL IS the "distribute" gesture.
+    //   • Nobody can enumerate the collection — see the folio_projects
+    //     LIST rule below, which stays locked to owner-scoped queries.
+    //   • body/paid subcollection stays owner-only regardless. Paid
+    //     content still routes through the worker's /paid-content
+    //     endpoint which verifies the share/paywall JWT via service
+    //     account before returning anything.
+    function folioVisible(id) {
+      return parentDoc(id) != null;
+    }
+    match /folio_projects/{id} {
+      // Per-doc GET: unrestricted. Folio IDs are unguessable
+      // (13-digit timestamp + 6-char base36 suffix); knowing the ID
+      // IS the credential. This lets share links work on pure drafts
+      // — the author generates a URL, hands it to a reader, reader
+      // opens it, no release-first step required. Prior gating on
+      // release.published made share links fail for beta / editor
+      // flows; the earlier fix loosened it to "any release object"
+      // but Thomas / Jacob want it to work BEFORE any release is
+      // configured too. This is that.
+      //
+      // LIST: four ways a query is allowed. Each branch corresponds
+      // to a CLIENT-side query pattern documented in
+      // docs/CRITICAL_PATHS.md — keep that file in sync when adding
+      // a new branch here.
+      //   1. Owner-scoped queries: `where('uid','==', <me>)`
+      //      matches each result's uid to the caller. Powers the
+      //      "my folios" sidebar list (app.html).
+      //   2. Shelf queries: `where('release.listOnShelf','==',true)`
+      //      matches each result's listOnShelf flag. Powers the
+      //      public /shelf/ page.
+      //   3. Published queries: `where('release.published','==',true)`
+      //      (optionally combined with `where('uid','==',<author>)`).
+      //      Every returned folio has been released for public reading,
+      //      so anonymous LIST is safe. Powers the /imprint/ page,
+      //      any future author-page renderers, and any "browse by
+      //      author" flow.
+      //   4. Admin bypass — /admin/shelf/ needs to enumerate
+      //      pending + rejected listings that aren't publicly visible.
+      //
+      // Any unfiltered `collection(folio_projects)` query is still
+      // denied — nobody can enumerate every folio in the system just
+      // by hitting the collection without one of these constraints
+      // in their query. Every returned doc must PROVABLY satisfy the
+      // rule based on the query's WHERE clauses — that's what
+      // Firestore's rule engine checks.
+      //
+      // Sensitive content still gated separately: body/paid stays
+      // owner-only (see match /body/{doc} below); the paywall worker's
+      // /paid-content endpoint is the only path to paid content and
+      // it verifies the share/paywall JWT via service account first.
+      allow get:    if true;
+      allow list:   if isUser(resource.data.uid)
+                    || (resource.data.release != null
+                        && resource.data.release.listOnShelf == true)
+                    || (resource.data.release != null
+                        && resource.data.release.published == true)
+                    || isAdmin();
+      // Create: the new doc must be stamped with the creator's own uid.
+      // Public Shelf listing is blocked for anonymous accounts — an
+      // author must have a real identity provider linked before their
+      // folio can go on the public marketplace. Anonymous accounts can
+      // still create private folios and share them via signed URLs;
+      // they just can't push to the discovery surface where a
+      // moderator would need to reach them.
+      allow create: if isUser(request.resource.data.uid)
+                    && (
+                      request.resource.data.release == null
+                      || request.resource.data.release.listOnShelf != true
+                      || request.auth.token.firebase.sign_in_provider != 'anonymous'
+                    );
+      // Update / delete: must already own it. Checked against the
+      // EXISTING doc — partial merge-updates (publishing a release,
+      // setting shelfId) legitimately omit `uid` from the payload, so
+      // the incoming data can't be relied on here.
+      //
+      // Same anonymous → Shelf block applies on update: an anonymous
+      // owner can't flip release.listOnShelf to true. Admins bypass
+      // (isAdmin branch) so moderator write-throughs still work.
+      //
+      // Admin update — Folio operators can update ANY folio doc so
+      // /admin/boost can write release.featuredUntil on paying authors'
+      // listings. Delete stays owner-only (safer default; admins can
+      // demote by writing featuredUntil to null instead).
+      allow update: if (
+                      isUser(resource.data.uid)
+                      && (
+                        request.resource.data.release == null
+                        || request.resource.data.release.listOnShelf != true
+                        || request.auth.token.firebase.sign_in_provider != 'anonymous'
+                      )
+                    ) || isAdmin();
+      allow delete: if isUser(resource.data.uid);
+      // Manuscript body subdocs.
+      //   body/main — free preview / non-paid content. Same visibility
+      //               as the parent folio (owner OR published).
+      //   body/paid — paid chapter content (audit D1). OWNER-ONLY
+      //               from Firestore; non-owners get permission-denied
+      //               on a direct read. The paywall worker fetches it
+      //               via a service account on a license-verified
+      //               request (see folio-paywall-worker.js
+      //               /paid-content), so a buyer holding a valid JWT
+      //               can still receive paid content — but no
+      //               anonymous reader can.
+      // Writes (both docs) are owner-only.
+      match /body/{doc} {
+        allow read:  if doc == 'paid'
+                       ? isUser(parentUid(id))
+                       : folioVisible(id);
+        allow write: if isUser(parentUid(id));
+      }
+      // Version history — owner only, both directions.
+      match /versions/{vid} {
+        allow read, write: if isUser(parentUid(id));
+      }
+      // Character cast — written by characters.js (src/modules) when the
+      // user adds / edits / deletes a character in Manage Characters.
+      // Stored at folio_projects/<id>/characters/<charId>.
+      //   Read: owner, or anyone if the folio is published (collaborators
+      //         and readers can see the cast so dialogue colors / voices
+      //         resolve on the share link too).
+      //   Write: owner only — the cast is editorial, not reader content.
+      match /characters/{charId} {
+        allow read:  if folioVisible(id);
+        allow write: if isUser(parentUid(id));
+      }
+      // Editorial metadata — single-doc helpers written by the modules
+      // alongside the main body. Currently used for:
+      //   metadata/dialogueAssignments  →  { chapterId: { hash: charId } }
+      // Add new entries (per-character voice settings, narrator config,
+      // etc.) under this same subcollection so they share the rule.
+      //   Read:  owner OR anyone on a published folio (the audio worker
+      //          and the dialogue-color highlight need this on the
+      //          public share link).
+      //   Write: owner only.
+      match /metadata/{doc} {
+        allow read:  if folioVisible(id);
+        allow write: if isUser(parentUid(id));
+      }
+      // Live presence — readable by anyone who can see the folio; each
+      // user may write only their own presence doc (it's keyed by uid).
+      match /presence/{uid} {
+        allow read:  if folioVisible(id);
+        allow write: if isUser(uid);
+      }
+      // Annotations.
+      // Per-doc scope enforcement (audit B4 — fixed). The folio owner
+      // sees every annotation on their own folio; anyone else can read
+      // an annotation only if its scope is 'public' OR they personally
+      // authored it (uid match). Editor / collaborator / others'
+      // personal notes no longer leak.
+      //
+      // A LIST query is permitted only when it's constrained so every
+      // result satisfies one of those branches:
+      //   • Owner — no filter needed (parentUid(id) is collection-level).
+      //   • Non-owner — must query with either
+      //       where('scope','==','public')
+      //       where('uid','==', auth.uid)
+      // The Folio client splits its subscription accordingly in
+      // _annSubscribe / _annInitFromCloud.
+      match /annotations/{aid} {
+        allow read:   if isUser(parentUid(id))
+                      || resource.data.scope == 'public'
+                      || (request.auth != null
+                          && resource.data.uid == request.auth.uid);
+        // Create: stamped with your own uid — or anything, if you own
+        // the folio (covers the owner migrating legacy annotations).
+        allow create: if isUser(request.resource.data.uid)
+                      || isUser(parentUid(id));
+        // Update / delete: the annotation's author, or the folio owner.
+        allow update, delete: if isUser(parentUid(id))
+                      || isUser(resource.data.uid);
+      }
+      // ── Editor suggestions (non-destructive) ─────────────────────
+      // When a share-link user with 'editor' or 'collab' role edits
+      // the manuscript, their save is diverted to this subcollection
+      // rather than overwriting the owner's body/main. The owner reviews
+      // pending suggestions in the sidebar and clicks Accept per chapter
+      // to merge them. One doc per reviewer uid — a fresh save from the
+      // same reviewer just overwrites their own suggestion doc.
+      //
+      // Rules:
+      //   Create/update: reviewer writes under their own uid (stamped
+      //                  in suggestedByUid on the payload).
+      //   Read:          reviewer sees their own; owner sees all.
+      //   Delete:        owner (accept/reject cleans up) or reviewer.
+      match /suggestions/{suggesterUid} {
+        allow read:  if isUser(parentUid(id))
+                    || isUser(suggesterUid)
+                    || isUser(resource.data.suggestedByUid);
+        allow create, update: if isUser(suggesterUid)
+                    && isUser(request.resource.data.suggestedByUid);
+        allow delete: if isUser(parentUid(id))
+                    || isUser(suggesterUid)
+                    || isUser(resource.data.suggestedByUid);
+      }
+      // Subscribers — the serial-release email list.
+      match /subscribers/{sid} {
+        // Anyone may CREATE a subscriber doc — that's the public
+        // subscribe form. Restricted to exactly the three fields the
+        // app writes (_subAdd), with a sane email length cap.
+        allow create: if request.resource.data.keys()
+                          .hasOnly(['email','subscribedAt','unsubscribeToken'])
+                      && request.resource.data.email is string
+                      && request.resource.data.email.size() < 320;
+        // Locked down (audit B5 — done). Anonymous readers no longer
+        // touch this subcollection: the unsubscribe link in chapter
+        // emails now points at the folio-email worker's /unsubscribe
+        // endpoint, which uses a Google service account (IAM, not
+        // Firestore rules) to find + delete the matching doc. So
+        // read + delete here are strictly the owner's prerogative —
+        // closes the email-harvest / arbitrary-delete risk.
+        allow read, delete: if isUser(parentUid(id));
+        // Updates are owner-only regardless.
+        allow update: if isUser(parentUid(id));
+      }
+      // Signed teaser links — per-folio Firestore-backed share tokens
+      // that unlock ONE specific chapter for whoever holds the URL,
+      // without making that chapter publicly listed in release.teasers.
+      // Pattern: the owner mints a doc (tokenId = unguessable random)
+      // with `{chapterId, createdAt}`. The reader URL carries the
+      // tokenId in `?tt=`. The paywall worker reads the doc via its
+      // service account to verify before returning the chapter content.
+      //
+      //   Read   : owner only at the rule layer (the worker uses a
+      //            service account which bypasses rules — readers
+      //            never touch this subcollection directly).
+      //   Create : owner only, with a small payload shape lock so a
+      //            malicious owner-session can't sneak unexpected
+      //            fields into the doc.
+      //   Update : never (regenerate by delete + create).
+      //   Delete : owner only (revoke single link OR revoke-all
+      //            via subcollection sweep).
+      match /signed_teasers/{tokenId} {
+        allow read, delete: if isUser(parentUid(id));
+        allow create: if isUser(parentUid(id))
+                      && request.resource.data.keys()
+                           .hasOnly(['chapterId', 'createdAt'])
+                      && request.resource.data.chapterId is string
+                      && request.resource.data.chapterId.size() < 100;
+        allow update: if false;
+      }
+    }
+    // Per-user app settings — your own OR admin (needed for comping Press
+    // subscriptions from /admin/press/ for testing + edge cases).
+    match /folio_user_settings/{uid} {
+      allow read, write: if isUser(uid) || isAdmin();
+    }
+    // Reviews / testimonials — authors submit reviews from the app + reader.
+    // Each submission earns a free 24h Featured Boost on one of their folios
+    // (the boost is applied server-side via the paywall worker's
+    // /review-submit endpoint using its service account, which bypasses
+    // these client-facing rules).
+    //
+    // Public display is admin-curated: approvedForDisplay is only set to
+    // true by isAdmin() from /admin/reviews/. Anonymous readers can then
+    // read those approved docs for the welcome-page testimonials scroll.
+    match /reviews/{reviewId} {
+      // Read: (a) publicly displayed reviews are readable by anyone;
+      //       (b) authors can always see their own submissions;
+      //       (c) admins can read any review (moderation queue + metrics).
+      allow read: if (resource.data.approvedForDisplay == true
+                     && resource.data.allowMarketing == true)
+                  || isUser(resource.data.uid)
+                  || isAdmin();
+      // Create: must be signed in + submitting under your own uid.
+      // Shape-lock keeps a rogue client from sneaking unexpected fields
+      // (like pre-approving your own review).
+      allow create: if isUser(request.resource.data.uid)
+                    && request.resource.data.rating is number
+                    && request.resource.data.rating >= 1
+                    && request.resource.data.rating <= 5
+                    && request.resource.data.text is string
+                    && request.resource.data.text.size() >= 10
+                    && request.resource.data.text.size() <= 500
+                    && request.resource.data.approvedForDisplay == false;
+      // Update: authors can edit their own text/rating/allowMarketing but
+      //         cannot self-approve for display; admins can approve.
+      allow update: if (isUser(resource.data.uid)
+                        && request.resource.data.uid == resource.data.uid
+                        && request.resource.data.approvedForDisplay == resource.data.approvedForDisplay)
+                    || isAdmin();
+      // Delete: author or admin.
+      allow delete: if isUser(resource.data.uid) || isAdmin();
+    }
+    // ── Promos / seasonal discount codes ───────────────────────────
+    // Managed via /admin/promos/. See docs/DISCOUNT_SCHEDULE.md for the
+    // marketing calendar this feeds. Doc id is the promo CODE itself
+    // (uppercased) so lookup by code is a single get() — no query.
+    //
+    // Payload:
+    //   { code, label, pct, tiers[], billingModes[],
+    //     validFrom, validTo, teaserFrom, teaserCopy, activeCopy,
+    //     createdAt, createdBy }
+    //
+    // READ  : public. Every visitor to /press/, /shelf/, /app.html
+    //         needs to see whether a promo is active or pre-teasing
+    //         so the banner + auto-fill code work. Doc content is
+    //         non-sensitive (public marketing copy + a code the
+    //         author enters at checkout anyway).
+    //
+    // WRITE : admin only. Managed via the admin UI.
+    //   WRITE (updated 2026-08-11): admin OR moderator. Promo
+    //   planning is a collaborative surface — trusted moderators can
+    //   help shape the year's calendar without needing full admin
+    //   powers. isModerator() already includes isAdmin() so this is
+    //   a strict superset of the old rule.
+    match /folio_promos/{code} {
+      allow read: if true;
+      allow write: if isModerator();
+    }
+    // ── Promo redemption audit log ─────────────────────────────────
+    // Written by the paywall Worker's /press-subscribe endpoint via
+    // service account when a valid promo code is applied to a
+    // subscription. Doc id = PayPal subscription id so writes are
+    // idempotent. Payload includes { promoCode, pct, tier, period,
+    // uid, customId, createdAt, creditStatus } — creditStatus starts
+    // 'pending' and flips to 'credited' when admin processes the
+    // manual refund via /admin/press/.
+    //
+    // READ  : admin only. Used by /admin/press/ to show pending
+    //         redemptions that need refund processing.
+    // WRITE : never from clients. Worker uses service account which
+    //         bypasses these rules.
+    match /folio_promo_redemptions/{subscriptionId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+    // ── Admin outbound messages (queued from /admin/users/) ────────
+    // Managed via /admin/users/. Every "Contact" action from the admin
+    // users page writes one doc here per targeted uid. Payload:
+    //   { fromUid, targetUid, subject, body, createdAt, status,
+    //     sentAt?, sentBy?, deliveryChannel?, deliveryDetail? }
+    //
+    // status vocabulary:
+    //   'queued'    - awaiting delivery (admin will process manually
+    //                 OR the folio-email worker's /admin-message-send
+    //                 endpoint will pick it up in a future phase)
+    //   'sent'      - delivered via Resend / SMTP
+    //   'skipped'   - target user has no discoverable contact email
+    //                 (e.g. anonymous auth, no imprint contact URL)
+    //   'error'     - delivery attempt failed
+    //
+    // READ  : admin only. Used by /admin/users/ to show recent
+    //         message history + delivery status for a given user.
+    // WRITE : admin only. Delivery-status updates come from the
+    //         folio-email worker via service account (bypasses rules).
+    match /folio_admin_messages/{messageId} {
+      allow read:  if isAdmin();
+      allow create: if isAdmin()
+                    && request.resource.data.keys().hasAny(['fromUid', 'targetUid', 'subject', 'body'])
+                    && request.resource.data.fromUid == request.auth.uid
+                    && request.resource.data.targetUid is string
+                    && request.resource.data.subject is string
+                    && request.resource.data.body is string
+                    && request.resource.data.body.size() < 5000;
+      allow update, delete: if isAdmin();
+    }
+    // Admin + moderator role assignments — used by isAdmin() and
+    // isModerator() functions above. Managed via /admin/admins/.
+    //   Read:  public — needed so client-side code can check role state
+    //          without special permissions. Contents (uid + role names +
+    //          display name) are not sensitive.
+    //   Write: admin only. Bootstrap admins in isAdmin() can always
+    //          write, so a fresh install can grant its first non-bootstrap
+    //          admin without hitting a chicken-and-egg lock.
+    match /folio_roles/{uid} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    // Public imprint themes — Indie+ subscribers customize their /imprint/
+    // page (accent color, hero image, header font). Anyone can READ (needed
+    // to render another author's customized imprint to visitors), but only
+    // the owner can WRITE their own theme. The client + worker separately
+    // gate whether to APPLY the theme based on subscription status —
+    // reading a theme doc without a valid Press subscription is safe
+    // because it just returns styling values, not sensitive data.
+    // Product-photo one-time purchases. Written by the paywall worker
+    // via a service account when PayPal captures a $3 Order — clients
+    // never write directly. Users can read their own purchases so the
+    // /press/photos/ page can enable the Download button without a
+    // worker round-trip.
+    match /folio_photo_purchases/{captureId} {
+      allow read:  if isUser(resource.data.uid) || isAdmin();
+      allow write: if false;  // worker only (bypasses rules via SA)
+    }
+    match /folio_imprint_themes/{uid} {
+      allow read: if true;
+      // Owner writes their own customization; admins can also write to mark
+      // fields like `foundingContributor` from /admin/press/ comp flow.
+      allow write: if isUser(uid) || isAdmin();
+    }
+    // ── Custom subdomain slugs (Imprint tier) ───────────────────────
+    // Reverse index for the wildcard-subdomain feature. Doc id IS the
+    // slug (thomas.onfolio.press → doc id 'thomas'). Payload:
+    //   { uid: <ownerUid>, createdAt: <ms> }
+    // The Cloudflare Pages middleware (functions/_middleware.js)
+    // rewrites <slug>.onfolio.press → /imprint/?slug=<slug>, and the
+    // imprint page reads THIS collection to resolve slug → uid.
+    //
+    // READ  : public. The imprint page and the edge middleware both
+    //         need to look up slugs anonymously — the whole point of
+    //         a custom subdomain is that a signed-out visitor can
+    //         type it into the address bar and land on the author's
+    //         imprint page. Doc contains only uid + createdAt (no
+    //         secrets).
+    //
+    // WRITE : only the claimant, and only when they're stamping the
+    //         doc with their OWN uid. Combined with `create: doc
+    //         must not already exist for someone else`, this gives
+    //         first-come-first-served uniqueness at the rules layer.
+    //         Client uses a runTransaction so it can atomically
+    //         delete the caller's OLD slug doc and write the new one
+    //         (see _saveImprintSlug in app.html).
+    //
+    // Admins can override to reclaim squatted / impersonating slugs
+    // per the shelf-moderation contract.
+    match /folio_imprint_slugs/{slug} {
+      allow read: if true;
+      // Create: must be signed in, stamping your own uid, and the
+      // slug doc must not already exist (Firestore enforces this
+      // when `resource == null` is implicit in a create-only branch).
+      allow create: if isUser(request.resource.data.uid)
+                    && request.resource.data.keys().hasOnly(['uid', 'createdAt'])
+                    && request.resource.data.uid is string
+                    && request.resource.data.createdAt is number;
+      // Update: owner can refresh createdAt (rare — mostly a re-claim
+      // after a delete-then-recreate flow). Cannot re-assign a slug
+      // to a different uid — the payload's uid must match the
+      // existing doc's uid, blocking silent takeover.
+      allow update: if (isUser(resource.data.uid)
+                        && request.resource.data.uid == resource.data.uid)
+                    || isAdmin();
+      // Delete: owner can release their own slug; admins can reclaim.
+      allow delete: if isUser(resource.data.uid) || isAdmin();
+    }
+    // Lulu print-on-demand job records. Doc id is "<uid>_<jobId>" and
+    // the payload carries `uid`. create checks the incoming payload;
+    // read / update / delete check the EXISTING doc (no payload on a
+    // read or delete). The app's list query is constrained to
+    // where('uid','==', <me>), so it satisfies the read rule.
+    match /lulu_jobs/{jobId} {
+      allow create: if isUser(request.resource.data.uid);
+      allow read, update, delete: if isUser(resource.data.uid);
+    }
+    // ── Analytics events ────────────────────────────────────────────
+    // Written ONLY by the paywall worker's /event endpoint via its
+    // service account (which bypasses these rules). Clients have zero
+    // access — no read, no write, ever. This keeps events immutable
+    // to the browser (readers can't fake purchase events, authors
+    // can't stuff their own view counts) and keeps the rules simple
+    // because no per-doc gating logic is needed. The daily rollup
+    // cron in folio-email-worker.js also uses the service account.
+    match /folio_events/{eventId} {
+      allow read, write: if false;
+    }
+    // ── Metrics rollup docs (per-folio subcollection) ───────────────
+    // Written by the daily rollup cron (service account, bypasses).
+    // Read by folio owners (for the author Metrics tab) and admins
+    // (for the platform dashboard). LIST is provably satisfiable for
+    // both because the parent-doc lookup binds the owner uid.
+    match /folio_projects/{id}/metrics/{doc} {
+      allow read:  if isUser(parentUid(id)) || isAdmin();
+      allow write: if false;
+    }
+    // ── Vendor webhook config (Option C+ auto-delivery) ─────────
+    // Stores each folio's payment-vendor webhook secret + type. Written
+    // only by the paywall worker's /vendor-config endpoint via service
+    // account (which bypasses these rules). NEVER exposed to clients —
+    // the secret would let anyone forge a purchase notification.
+    match /folio_vendor_webhooks/{folioId} {
+      allow read, write: if false;
+    }
+    // ── Owner-level vendor config (multi-tenant Option C+) ──────
+    // One doc per Folio account (keyed by ownerUid) holding each
+    // vendor's webhook secret. Written only by the paywall worker's
+    // /vendor-owner-config endpoint via service account. Never
+    // client-readable — knowing another owner's secret would let an
+    // attacker forge purchase notifications on their behalf.
+    match /folio_vendor_owner_configs/{ownerUid} {
+      allow read, write: if false;
+    }
+    // ── Paid-sales log per folio (Option C+ audit trail) ────────
+    // Written by the paywall worker on every validated vendor webhook.
+    // Read by folio owner + admins for revenue metrics; write is
+    // service-account only (worker records the sale after signature
+    // validation, clients never touch it directly).
+    match /folio_projects/{id}/paid_sales/{saleId} {
+      allow read:  if isUser(parentUid(id)) || isAdmin();
+      allow write: if false;
+    }
+    // ── Admin digest latch (worker → admin metrics tile) ────────
+    // Populated by folio-email-worker.js runAdminDigest() after each
+    // digest send — stores lastSentMs, lastPendingCount,
+    // lastRecipients. Read from admin/metrics/index.html to render
+    // the "Last admin digest sent" tile. Worker writes via service
+    // account (bypasses rules); this branch grants admin-only READ
+    // so the metrics page can hydrate. Without it the client-side
+    // getDoc hit the default-deny and the tile rendered "err"
+    // (Jacob's screenshot 2026-08-04). See CRITICAL_PATHS.md.
+    match /folio_admin_digest_state/{doc} {
+      allow read:  if isAdmin();
+      allow write: if false; // worker-only via service account
+    }
+    // ───────────────────────────────────────────────────────────────
+    // AFFILIATE PROGRAM (Phase 1)
+    // ───────────────────────────────────────────────────────────────
+    // See docs/AFFILIATES_SPEC.md. Owners invite affiliates per folio
+    // and set a commission rate; affiliates get a short link + QR;
+    // paywall worker attributes purchases and computes commission;
+    // owners settle manually via Ko-fi / PayPal and mark the ledger.
+    //
+    // All ledger writes flow through the paywall worker's
+    // /affiliates/* endpoints via service account (which bypass rules).
+    // Client writes are intentionally minimal: only the affiliate's
+    // status flip from 'invited' → 'active' is allowed browser-side,
+    // and only if the acting user's email matches the invited email.
+    // Everything else is server-mediated so rates, ledgers, and
+    // settlements cannot be tampered with client-side.
+    // ── Affiliations (one doc per owner+folio+affiliate triple) ──
+    // Readable by the folio owner AND the affiliate (once accepted).
+    // Client-writable ONLY for the invited affiliate to accept —
+    // limited to flipping status from 'invited' to 'active' and
+    // stamping acceptedAt. All other mutations (rate changes, pause,
+    // remove, ledger updates) go through the paywall worker.
+    match /folio_affiliations/{affiliationId} {
+      allow read: if request.auth != null && (
+        isUser(resource.data.ownerId) ||
+        isUser(resource.data.affiliateUserId) ||
+        // Invited-but-not-accepted: allow the invitee to read their
+        // pending invite by matching email (case-insensitive
+        // compared to token email).
+        (
+          resource.data.status == 'invited' &&
+          request.auth.token.email != null &&
+          resource.data.affiliateEmail == request.auth.token.email.lower()
+        ) ||
+        isAdmin()
+      );
+      // Client accept only: invited → active, stamps acceptedAt +
+      // affiliateUserId + affiliateHandle. Nothing else may change.
+      allow update: if request.auth != null
+        && resource.data.status == 'invited'
+        && request.resource.data.status == 'active'
+        && request.auth.token.email != null
+        && resource.data.affiliateEmail == request.auth.token.email.lower()
+        && request.resource.data.affiliateUserId == request.auth.uid
+        && request.resource.data.ownerId == resource.data.ownerId
+        && request.resource.data.folioId == resource.data.folioId
+        && request.resource.data.rate == resource.data.rate
+        && request.resource.data.code == resource.data.code
+        && request.resource.data.lifetimeGross == resource.data.lifetimeGross
+        && request.resource.data.lifetimeCommission == resource.data.lifetimeCommission
+        && request.resource.data.pendingCommission == resource.data.pendingCommission
+        && request.resource.data.settledCommission == resource.data.settledCommission;
+      // Create / delete / all other updates: worker only.
+      allow create, delete: if false;
+    }
+    // ── Attribution cookies materialised server-side ─────────────
+    // Composite key = "{userId}_{folioId}". Written by the paywall
+    // worker when a signed-in reader lands on a folio via an
+    // affiliate link. Never client-readable (would leak which
+    // affiliate a user was attributed to) — only used server-side
+    // at purchase time to look up commission.
+    match /folio_affiliate_attributions/{attributionId} {
+      allow read, write: if false;
+    }
+    // ── Click log for affiliate dashboards ───────────────────────
+    // Sampled writes from the reader worker. Readable by the folio
+    // owner + the affiliate whose code was clicked (for their
+    // dashboard stats). Worker-write only.
+    match /folio_affiliate_clicks/{clickId} {
+      allow read: if request.auth != null && (
+        isUser(resource.data.ownerId) ||
+        isUser(resource.data.affiliateUserId) ||
+        isAdmin()
+      );
+      allow write: if false;
+    }
+    // ── Settlements (owner payouts to affiliates) ────────────────
+    // One doc per settlement event. Readable by both parties —
+    // affiliate needs to see "Jacob paid me $124 on X date". Written
+    // by the paywall worker when the owner confirms a payout in the
+    // Ship › Affiliates UI. Nothing here is client-mutable — the
+    // owner's action posts to /affiliates/settle which writes the
+    // record via service account (protects against a compromised
+    // owner client fabricating settlement history).
+    match /folio_affiliate_settlements/{settlementId} {
+      allow read: if request.auth != null && (
+        isUser(resource.data.ownerId) ||
+        isUser(resource.data.affiliateUserId) ||
+        isAdmin()
+      );
+      allow write: if false;
+    }
+    // ───────────────────────────────────────────────────────────────
+    // KO-FI TIPS LOG (Task #30 Phase 3a — instrumentation)
+    // ───────────────────────────────────────────────────────────────
+    // Ko-fi webhook receives Donation events with no shop_items; the
+    // legacy paid-sales pipeline drops them because there's no
+    // product to match. We now catch them and log to a per-owner tip
+    // subcollection so authors can see + reconcile + tax-report their
+    // Ko-fi tips even before we wire folio-level attribution
+    // (Phase 3b). Owner-readable, worker-write only.
+    match /folio_users_public/{uid}/tips/{tipId} {
+      allow read: if isUser(uid) || isAdmin();
+      allow write: if false;
+    }
+    // ───────────────────────────────────────────────────────────────
+    // FOLIO SLUGS (Task #26 — per-folio SEO)
+    // ───────────────────────────────────────────────────────────────
+    // Reverse-lookup index: /f/<slug> → { folioId, ownerUid, updatedAt }
+    // Public read (share worker resolves anonymously); writes only
+    // through the app.html release flow, restricted to the owner's uid
+    // and to slugs matching the URL-safe charset. Slug uniqueness is
+    // enforced by the create-only rule: an existing doc can be
+    // deleted/replaced only by its current owner.
+    match /folio_slugs/{slug} {
+      allow read: if true;
+      allow create: if request.auth != null
+        && isUser(request.resource.data.ownerUid)
+        && slug.matches('^[a-z0-9][a-z0-9-]{1,63}$')
+        && request.resource.data.folioId is string;
+      allow update, delete: if request.auth != null
+        && isUser(resource.data.ownerUid);
+    }
+    // ───────────────────────────────────────────────────────────────
+    // SUPPORT TICKETS (Task #27)
+    // ───────────────────────────────────────────────────────────────
+    // /support form posts to the paywall worker's /support-submit,
+    // which writes the ticket via service account. Admin queue at
+    // /admin/support/ reads via /support-list (worker-mediated).
+    // Client rules are minimal — the ticket's reporter uid can read
+    // their own submission (future "my tickets" surface); everything
+    // else is worker-only.
+    match /folio_support_tickets/{ticketId} {
+      allow read: if request.auth != null && (
+        isUser(resource.data.reporterUid) ||
+        isAdmin()
+      );
+      allow write: if false;  // worker-only via service account
+    }
 
-    // Worker-only root collections
-    match /slugs/{slug} { allow read: if request.auth != null; allow write: if false; }
-    match /jobs/{id} { allow read, write: if false; }
-    match /schedule/{id} { allow read, write: if false; }
+    /* ---------------------------------------------------------
+     * INK — author list marketing (ink.jacobsiler.com)
+     * ---------------------------------------------------------
+     * Each author owns their own subtree under /authors/{uid}.
+     * The Ink Worker (ink-worker) uses a service account, which
+     * bypasses these rules, for everything else: sending jobs,
+     * schedules, welcome-series runs, the Resend email index, and
+     * public join/unsubscribe/approve pages. None of these paths
+     * are used by Folio or Beam.
+     * --------------------------------------------------------- */
+    match /authors/{uid} {
+      allow read, write: if isUser(uid);
+
+      // subscribers, campaigns, plans, suggestions, automations, metricsDaily
+      match /{collection}/{doc} {
+        allow read, write: if isUser(uid);
+      }
+      // Per-recipient delivery/open/click records — Worker writes only.
+      match /campaigns/{cid}/recipients/{sid} {
+        allow read:  if isUser(uid);
+        allow write: if false;
+      }
+    }
+    // Sign-up slug → uid reverse index. Written by the Worker when an
+    // author sets their join address; readable by signed-in users so
+    // the app can show availability.
+    match /slugs/{slug} {
+      allow read:  if request.auth != null;
+      allow write: if false;
+    }
+    // Worker-only root collections (service account bypasses rules).
+    match /jobs/{id}           { allow read, write: if false; }
+    match /schedule/{id}       { allow read, write: if false; }
     match /automationRuns/{id} { allow read, write: if false; }
-    match /emailIndex/{id} { allow read, write: if false; }
+    match /emailIndex/{id}     { allow read, write: if false; }
+
+    // Anything not matched above is denied by default.
   }
 }

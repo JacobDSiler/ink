@@ -1,0 +1,7 @@
+Ink v2: multi-author list manager, sender, planner and AI drafting
+
+- Firebase Auth + Firestore per-author data model (authors/{uid}/...)
+- Cloudflare Worker: Resend sending jobs, webhooks, join/unsubscribe/approve pages, cron nudges, Gemini drafting
+- App: dashboard, approvals, letters editor with live preview, plan playbooks, readers import/export, templates, welcome series, analytics, settings
+- Shared renderer and template library used by app and Worker
+- Merged Firestore rules (Boxes + Folio + Ink), deploy.cmd

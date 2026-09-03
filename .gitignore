@@ -1,0 +1,7 @@
+node_modules/
+worker/node_modules/
+worker/.wrangler/
+worker/.dev.vars
+*service-account*.json
+.firebase/
+firebase-debug.log

@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#16120e">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%276%27 fill=%27%2316120e%27/%3E%3Ctext x=%2716%27 y=%2723%27 font-family=%27Georgia,serif%27 font-size=%2720%27 text-anchor=%27middle%27 fill=%27%23d4a84b%27%3E✦%3C/text%3E%3C/svg%3E">
 <title>Ink — Author List Marketing</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Crimson+Pro:ital,wght@0,300;0,400;0,600;1,400&display=swap" rel="stylesheet">
@@ -353,7 +354,18 @@ onAuthStateChanged(auth, async (user) => {
   if (!user) { S.user = null; $('auth').classList.remove('hidden'); $('app').classList.remove('visible'); return; }
   S.user = user; $('auth').classList.add('hidden');
   $('foot-name').textContent = user.email || '';
-  const snap = await getDoc(aDoc());
+  let snap;
+  try { snap = await getDoc(aDoc()); }
+  catch (e) {
+    $('app').classList.add('visible'); S.view = 'error';
+    const perm = /permission/i.test(e.message || '');
+    $('main').innerHTML = `<div class="wizard fade" style="text-align:center;padding-top:10vh"><div class="ornament">✦ ✦ ✦</div><h1 style="margin:.5rem 0">Ink can't reach its database</h1>
+      <p class="muted">${perm ? 'Firestore refused the request: <b>Missing or insufficient permissions</b>. The Ink rules block has not been published to the <code>miscellaneous-117e9</code> project yet.' : esc(e.message)}</p>
+      ${perm ? `<div class="card" style="text-align:left;margin-top:1.5rem"><div class="card-body small"><b>Fix (one minute):</b> Firebase console → Firestore → Rules → paste the block from <code>firestore.rules</code> just before the final <code>// Anything not matched above…</code> line → Publish. Then reload this page.</div></div>` : ''}
+      <div class="actions" style="justify-content:center;margin-top:1rem"><button class="btn btn-primary" onclick="location.reload()">Reload</button><button class="btn btn-ghost" onclick="ink.signOut()">Sign out</button></div>
+      <p class="dim small" style="margin-top:2rem">Signed in as ${esc(user.email || '')}</p></div>`;
+    return;
+  }
   if (!snap.exists() || !snap.data().onboarded) { $('app').classList.add('visible'); return renderOnboarding(snap.exists() ? snap.data() : {}); }
   startApp();
 });

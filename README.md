@@ -26,7 +26,7 @@ legacy/index.html     the original single-author Ink Room page
 
 ### 1. Firebase (project `miscellaneous-117e9`)
 1. Authentication → enable **Google** and **Email/Password**. Add `ink.jacobsiler.com` to authorised domains (authDomain is already `auth.jacobsiler.com`).
-2. Firestore → Rules → paste `firestore.rules` and publish.
+2. Firestore rules: `firestore.rules` is the full merged file (Boxes + Folio + Ink). `deploy.cmd` publishes it via the Firebase CLI (`npm i -g firebase-tools`, then `firebase login` once); or paste it into the console.
 3. Project settings → Service accounts → **Generate new private key**. Keep the JSON; it becomes the `FIREBASE_SERVICE_ACCOUNT` secret.
 
 ### 2. Resend
@@ -53,7 +53,7 @@ npx wrangler deploy
 Check `PUBLIC_URL` in `wrangler.toml` matches the deployed URL (or add a route like `ink-api.jacobsiler.com`), and `WORKER` at the top of `index.html` matches too. The cron (`*/5 * * * *`) is registered on deploy.
 
 ### 5. Publish the app
-Push to GitHub; Pages serves `index.html` at ink.jacobsiler.com. Sign in, complete onboarding, add your postal address (required in every marketing email), and import your existing list (MailerLite export CSV works as-is).
+Double-click `deploy.cmd` (edit `COMMIT_MESSAGE.txt` first): it adds, commits and pushes, deploys the Firestore rules, and deploys the Worker. Or push to GitHub manually; Pages serves `index.html` at ink.jacobsiler.com. Sign in, complete onboarding, add your postal address (required in every marketing email), and import your existing list (MailerLite export CSV works as-is).
 
 ## Data model (Firestore)
 
