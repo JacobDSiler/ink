@@ -2,809 +2,919 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<title>The Ink Room — J.D. Siler</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#16120e">
+<title>Ink — Author List Marketing</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Crimson+Pro:wght@300;400;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Crimson+Pro:ital,wght@0,300;0,400;0,600;1,400&display=swap" rel="stylesheet">
 <style>
   :root {
-    --ink:        #16120e;
-    --ink-mid:    #2a2218;
-    --ink-soft:   #3d3428;
-    --brass:      #b8860b;
-    --brass-light:#d4a84b;
-    --brass-pale: #f0d080;
-    --parch:      #f5ead0;
-    --parch-mid:  #e8d5b0;
-    --parch-dark: #c8b080;
-    --cavorite:   #5ba8c4;
-    --cav-glow:   #7ec8e3;
-    --ember:      #c84b20;
-    --text:       #2a2218;
-    --fade:       rgba(184,134,11,0.15);
-    --border:     rgba(184,134,11,0.2);
+    --ink:#16120e; --ink-mid:#221c15; --ink-soft:#2f271d; --ink-line:#3d3428;
+    --brass:#b8860b; --brass-light:#d4a84b; --brass-pale:#f0d080;
+    --parch:#f5ead0; --parch-mid:#e8d5b0; --parch-dark:#a8946c; --parch-dim:#7d6d50;
+    --cav:#5ba8c4; --cav-glow:#7ec8e3; --ember:#c84b20; --moss:#6fa36b;
+    --chart-1:#b8862a; --chart-2:#3b9bd1;
+    --border:rgba(184,134,11,0.2); --border-strong:rgba(184,134,11,0.45);
+    --radius:4px;
+    --serif:'Cormorant Garamond',Georgia,serif; --text:'Crimson Pro',Georgia,serif;
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html { -webkit-text-size-adjust:100%; }
+  body { background:var(--ink); color:var(--parch); font-family:var(--text); font-size:17px; line-height:1.5; min-height:100vh; overflow-x:hidden; }
+  body::before { content:''; position:fixed; inset:0; pointer-events:none; z-index:0; opacity:.35;
+    background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E"); }
+  a { color:var(--brass-light); }
+  h1,h2,h3 { font-family:var(--serif); font-weight:600; line-height:1.2; color:var(--brass-light); }
+  h1 { font-size:2rem; font-weight:300; letter-spacing:.06em; }
+  h2 { font-size:1.35rem; }
+  h3 { font-size:1.05rem; letter-spacing:.06em; text-transform:uppercase; font-size:.85rem; }
+  p { margin-bottom:.8em; }
+  .muted { color:var(--parch-dark); }
+  .dim { color:var(--parch-dim); }
+  .small { font-size:.85rem; }
+  .ornament { color:var(--brass); letter-spacing:.5em; font-size:.7rem; opacity:.7; }
+  .hidden { display:none !important; }
+
+  /* ── Layout ── */
+  #app { display:none; position:relative; z-index:1; }
+  #app.visible { display:grid; grid-template-columns:230px 1fr; min-height:100vh; }
+  nav.side { background:var(--ink-mid); border-right:1px solid var(--border); padding:1.5rem 0; position:sticky; top:0; height:100vh; display:flex; flex-direction:column; }
+  .brand { padding:0 1.5rem 1.25rem; border-bottom:1px solid var(--border); margin-bottom:.75rem; }
+  .brand .t { font-family:var(--serif); font-size:1.5rem; font-weight:300; letter-spacing:.2em; color:var(--brass-light); }
+  .brand .s { font-size:.72rem; letter-spacing:.14em; text-transform:uppercase; color:var(--parch-dim); }
+  nav.side a.nl { display:flex; align-items:center; gap:.7rem; padding:.55rem 1.5rem; color:var(--parch-dark); text-decoration:none; font-size:.95rem; letter-spacing:.03em; border-left:2px solid transparent; }
+  nav.side a.nl:hover { color:var(--parch); background:rgba(255,255,255,.02); }
+  nav.side a.nl.active { color:var(--brass-light); border-left-color:var(--brass); background:rgba(184,134,11,.06); }
+  nav.side a.nl .g { width:1.1em; text-align:center; color:var(--brass); opacity:.8; }
+  nav.side .badge { margin-left:auto; background:var(--ember); color:#fff; font-size:.7rem; padding:.05em .5em; border-radius:9px; }
+  nav.side .foot { margin-top:auto; padding:1rem 1.5rem 0; border-top:1px solid var(--border); font-size:.8rem; color:var(--parch-dim); }
+  nav.side .foot b { display:block; color:var(--parch-dark); font-weight:400; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  main { padding:2rem 2.5rem 5rem; max-width:1180px; width:100%; }
+  .page-head { display:flex; align-items:flex-end; justify-content:space-between; gap:1rem; flex-wrap:wrap; margin-bottom:1.5rem; padding-bottom:1rem; border-bottom:1px solid var(--border); }
+  .page-head p { margin:0; color:var(--parch-dark); }
+  .actions { display:flex; gap:.5rem; flex-wrap:wrap; }
+  nav.bottom { display:none; }
+
+  @media (max-width: 860px) {
+    #app.visible { grid-template-columns:1fr; }
+    nav.side { display:none; }
+    main { padding:1.25rem 1rem 6rem; }
+    nav.bottom { display:flex; position:fixed; bottom:0; left:0; right:0; background:var(--ink-mid); border-top:1px solid var(--border); z-index:50; justify-content:space-around; padding:.4rem 0 calc(.4rem + env(safe-area-inset-bottom)); }
+    nav.bottom a { color:var(--parch-dim); text-decoration:none; font-size:.65rem; letter-spacing:.06em; text-transform:uppercase; display:flex; flex-direction:column; align-items:center; gap:.15rem; padding:.2rem .5rem; position:relative; }
+    nav.bottom a .g { font-size:1.15rem; color:var(--brass); opacity:.8; }
+    nav.bottom a.active { color:var(--brass-light); }
+    nav.bottom .badge { position:absolute; top:-2px; right:2px; background:var(--ember); color:#fff; font-size:.6rem; padding:0 .4em; border-radius:9px; }
   }
 
-  * { box-sizing: border-box; margin: 0; padding: 0; }
+  /* ── Cards & grid ── */
+  .card { background:var(--ink-mid); border:1px solid var(--border); border-radius:var(--radius); margin-bottom:1.25rem; overflow:hidden; }
+  .card-head { background:var(--ink-soft); padding:.6rem 1rem; display:flex; align-items:center; gap:.6rem; border-bottom:1px solid var(--border); }
+  .card-head h3 { margin:0; }
+  .card-head .g { color:var(--brass); opacity:.7; }
+  .card-head .right { margin-left:auto; display:flex; gap:.5rem; align-items:center; }
+  .card-body { padding:1rem 1.1rem; }
+  .grid { display:grid; gap:1.25rem; }
+  .grid-2 { grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); }
+  .grid-3 { grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); }
+  .tiles { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:.75rem; margin-bottom:1.25rem; }
+  .tile { background:var(--ink-mid); border:1px solid var(--border); border-radius:var(--radius); padding:.8rem 1rem; }
+  .tile .l { font-size:.7rem; letter-spacing:.1em; text-transform:uppercase; color:var(--parch-dim); }
+  .tile .v { font-family:var(--serif); font-size:1.9rem; font-weight:600; color:var(--parch); line-height:1.1; margin-top:.15rem; }
+  .tile .v.cav { color:var(--cav-glow); } .tile .v.brass { color:var(--brass-light); }
+  .tile .d { font-size:.8rem; color:var(--parch-dark); margin-top:.15rem; }
 
-  body {
-    background: var(--ink);
-    color: var(--parch);
-    font-family: 'Crimson Pro', Georgia, serif;
-    min-height: 100vh;
-    overflow-x: hidden;
-  }
+  /* ── Forms ── */
+  label { display:block; font-size:.74rem; letter-spacing:.08em; text-transform:uppercase; color:var(--parch-dark); margin:.9rem 0 .3rem; }
+  label:first-child { margin-top:0; }
+  label .hint { text-transform:none; letter-spacing:0; color:var(--parch-dim); font-size:.9em; }
+  input[type=text], input[type=email], input[type=password], input[type=url], input[type=date], input[type=time], input[type=number], select, textarea {
+    width:100%; background:var(--ink); border:1px solid var(--border); border-radius:var(--radius); padding:.65rem .85rem; color:var(--parch); font-family:var(--text); font-size:1rem; outline:none; transition:border-color .2s; }
+  input:focus, select:focus, textarea:focus { border-color:var(--brass); }
+  textarea { resize:vertical; line-height:1.55; min-height:90px; }
+  textarea.body { min-height:340px; font-size:1.05rem; }
+  select { appearance:none; background-image:linear-gradient(45deg,transparent 50%,var(--brass) 50%),linear-gradient(135deg,var(--brass) 50%,transparent 50%); background-position:calc(100% - 18px) 55%,calc(100% - 13px) 55%; background-size:5px 5px; background-repeat:no-repeat; padding-right:2.2rem; }
+  input::placeholder, textarea::placeholder { color:var(--parch-dim); opacity:.7; }
+  .row { display:flex; gap:.75rem; flex-wrap:wrap; align-items:flex-end; }
+  .row > * { flex:1 1 160px; }
+  .row > .auto { flex:0 0 auto; }
+  .inline { display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; }
+  .toggle { position:relative; display:inline-block; width:40px; height:22px; flex:0 0 auto; }
+  .toggle input { opacity:0; width:0; height:0; }
+  .toggle .s { position:absolute; inset:0; background:var(--ink-line); border-radius:22px; cursor:pointer; transition:.2s; }
+  .toggle .s::before { content:''; position:absolute; width:16px; height:16px; left:3px; top:3px; background:var(--parch-dark); border-radius:50%; transition:.2s; }
+  .toggle input:checked + .s { background:var(--brass); }
+  .toggle input:checked + .s::before { transform:translateX(18px); background:var(--ink); }
+  .toggle-row { display:flex; align-items:center; justify-content:space-between; gap:1rem; padding:.5rem 0; }
 
-  /* ── GRAIN OVERLAY ── */
-  body::before {
-    content: '';
-    position: fixed;
-    inset: 0;
-    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
-    pointer-events: none;
-    z-index: 0;
-    opacity: 0.4;
-  }
+  /* ── Buttons ── */
+  .btn { display:inline-flex; align-items:center; justify-content:center; gap:.4rem; padding:.6rem 1.1rem; border-radius:var(--radius); border:1px solid var(--border-strong); background:transparent; color:var(--brass-light); font-family:var(--text); font-size:.95rem; letter-spacing:.04em; cursor:pointer; transition:all .15s; text-decoration:none; white-space:nowrap; }
+  .btn:hover { background:rgba(184,134,11,.08); border-color:var(--brass); }
+  .btn:disabled { opacity:.45; cursor:not-allowed; }
+  .btn-primary { background:var(--brass); color:var(--ink); border-color:var(--brass); font-weight:600; }
+  .btn-primary:hover { background:var(--brass-light); }
+  .btn-send { background:var(--cav); color:var(--ink); border-color:var(--cav); font-weight:600; }
+  .btn-send:hover { background:var(--cav-glow); }
+  .btn-danger { color:var(--ember); border-color:rgba(200,75,32,.4); }
+  .btn-ghost { border-color:transparent; color:var(--parch-dark); }
+  .btn-ghost:hover { color:var(--parch); background:rgba(255,255,255,.03); }
+  .btn-sm { padding:.35rem .7rem; font-size:.82rem; }
+  .btn-block { width:100%; }
+  .btn .dots span { display:inline-block; width:4px; height:4px; margin:0 1px; background:currentColor; border-radius:50%; animation:blink 1.2s infinite; }
+  .btn .dots span:nth-child(2){animation-delay:.2s} .btn .dots span:nth-child(3){animation-delay:.4s}
+  @keyframes blink { 0%,80%,100%{opacity:.2} 40%{opacity:1} }
 
-  /* ── BACKGROUND GLOW ── */
-  .bg-glow {
-    position: fixed;
-    width: 600px; height: 600px;
-    border-radius: 50%;
-    background: radial-gradient(circle, rgba(184,134,11,0.06) 0%, transparent 70%);
-    top: -200px; right: -200px;
-    pointer-events: none;
-    z-index: 0;
-  }
-  .bg-glow-2 {
-    position: fixed;
-    width: 400px; height: 400px;
-    border-radius: 50%;
-    background: radial-gradient(circle, rgba(91,168,196,0.04) 0%, transparent 70%);
-    bottom: 0; left: -100px;
-    pointer-events: none;
-    z-index: 0;
-  }
+  /* ── Messages, chips, tables ── */
+  .msg { display:none; padding:.65rem .9rem; border-radius:var(--radius); font-size:.92rem; margin-top:.75rem; }
+  .msg.visible { display:block; }
+  .msg-error { background:rgba(200,75,32,.12); border:1px solid rgba(200,75,32,.35); color:#f0a080; }
+  .msg-success { background:rgba(111,163,107,.12); border:1px solid rgba(111,163,107,.35); color:#a8d8a4; }
+  .msg-info { background:rgba(91,168,196,.1); border:1px solid rgba(91,168,196,.3); color:var(--cav-glow); }
+  .chip { display:inline-block; font-size:.72rem; letter-spacing:.06em; text-transform:uppercase; padding:.15em .6em; border-radius:10px; border:1px solid var(--border); color:var(--parch-dark); margin:.1em .2em .1em 0; }
+  .chip.on { background:rgba(184,134,11,.15); color:var(--brass-light); border-color:var(--brass); cursor:pointer; }
+  .chip.click { cursor:pointer; }
+  .status { font-size:.7rem; letter-spacing:.1em; text-transform:uppercase; padding:.15em .55em; border-radius:2px; }
+  .status.draft { background:rgba(245,234,208,.08); color:var(--parch-dark); }
+  .status.scheduled, .status.approved, .status.pending { background:rgba(91,168,196,.15); color:var(--cav-glow); }
+  .status.sending { background:rgba(184,134,11,.2); color:var(--brass-pale); }
+  .status.sent, .status.active, .status.done { background:rgba(111,163,107,.18); color:#a8d8a4; }
+  .status.unsubscribed, .status.bounced, .status.complained, .status.skipped, .status.cancelled { background:rgba(200,75,32,.15); color:#f0a080; }
+  .status.upcoming { background:rgba(245,234,208,.06); color:var(--parch-dim); }
+  .status.drafted { background:rgba(212,168,75,.15); color:var(--brass-light); }
+  table { width:100%; border-collapse:collapse; font-size:.93rem; }
+  th { text-align:left; font-size:.7rem; letter-spacing:.1em; text-transform:uppercase; color:var(--parch-dim); font-weight:400; padding:.5rem .6rem; border-bottom:1px solid var(--border); }
+  td { padding:.55rem .6rem; border-bottom:1px solid rgba(184,134,11,.08); vertical-align:middle; }
+  tr.click { cursor:pointer; } tr.click:hover td { background:rgba(255,255,255,.02); }
+  .tbl-wrap { overflow-x:auto; }
+  .num { text-align:right; font-variant-numeric:tabular-nums; }
+  .list-item { display:flex; gap:1rem; align-items:center; padding:.75rem 0; border-bottom:1px solid rgba(184,134,11,.1); }
+  .list-item:last-child { border-bottom:0; }
+  .list-item .main { flex:1; min-width:0; }
+  .list-item .title { color:var(--parch); font-size:1.02rem; }
+  .list-item .sub { font-size:.85rem; color:var(--parch-dark); }
+  .empty { text-align:center; padding:2rem 1rem; color:var(--parch-dim); font-style:italic; }
+  .divider { display:flex; align-items:center; gap:1rem; margin:1.25rem 0; color:var(--parch-dim); font-size:.75rem; letter-spacing:.14em; text-transform:uppercase; }
+  .divider::before, .divider::after { content:''; flex:1; border-top:1px solid var(--border); }
+  code, .code { font-family:ui-monospace,Menlo,Consolas,monospace; font-size:.85em; background:var(--ink); border:1px solid var(--border); border-radius:3px; padding:.1em .4em; color:var(--parch-mid); }
+  pre.code { padding:.75rem; overflow-x:auto; white-space:pre-wrap; word-break:break-all; }
+  .kbd { color:var(--brass-light); }
 
-  /* ── LOCK SCREEN ── */
-  #lock-screen {
-    position: fixed;
-    inset: 0;
-    background: var(--ink);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    z-index: 100;
-    padding: 2rem;
-    gap: 2rem;
-    animation: fadeIn 0.6s ease;
-  }
+  /* ── Auth / onboarding ── */
+  #auth { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; padding:1.5rem; z-index:100; background:var(--ink); }
+  .auth-box { width:100%; max-width:380px; text-align:center; animation:fadeIn .6s ease; }
+  .auth-box h1 { font-size:2.4rem; letter-spacing:.2em; margin:.5rem 0 .2rem; }
+  .auth-box .tag { font-size:.85rem; letter-spacing:.1em; text-transform:uppercase; color:var(--parch-dim); margin-bottom:2rem; }
+  .auth-box input { text-align:center; margin-bottom:.6rem; }
+  .auth-box .btn { margin-top:.4rem; }
+  .auth-box .err { color:#f0a080; min-height:1.3em; font-size:.9rem; margin-top:.5rem; }
+  .wizard { max-width:640px; margin:0 auto; }
+  .wizard .steps { display:flex; gap:.4rem; justify-content:center; margin-bottom:1.5rem; }
+  .wizard .steps i { width:28px; height:3px; background:var(--ink-line); border-radius:2px; }
+  .wizard .steps i.on { background:var(--brass); }
 
-  .lock-title {
-    font-family: 'Cormorant Garamond', serif;
-    font-size: 2rem;
-    font-weight: 300;
-    letter-spacing: 0.15em;
-    color: var(--brass-light);
-    text-align: center;
-    line-height: 1.3;
-  }
-  .lock-sub {
-    font-size: 0.9rem;
-    color: var(--parch-dark);
-    letter-spacing: 0.08em;
-    text-align: center;
-  }
-  .lock-input-wrap {
-    width: 100%;
-    max-width: 320px;
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-  }
-  .lock-input {
-    width: 100%;
-    background: var(--ink-mid);
-    border: 1px solid var(--border);
-    border-radius: 3px;
-    padding: 0.9rem 1.2rem;
-    color: var(--parch);
-    font-family: 'Crimson Pro', serif;
-    font-size: 1.1rem;
-    letter-spacing: 0.05em;
-    outline: none;
-    transition: border-color 0.2s;
-    text-align: center;
-  }
-  .lock-input:focus { border-color: var(--brass); }
-  .lock-input::placeholder { color: var(--parch-dark); opacity: 0.5; }
-  .lock-error {
-    color: var(--ember);
-    font-size: 0.85rem;
-    text-align: center;
-    min-height: 1.2rem;
-  }
+  /* ── Editor ── */
+  .editor { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:1.25rem; align-items:start; }
+  @media (max-width:1000px) { .editor { grid-template-columns:1fr; } }
+  .preview-frame { width:100%; height:640px; border:1px solid var(--border); border-radius:var(--radius); background:#f4f1ea; }
+  .subj-alt { display:block; width:100%; text-align:left; padding:.4rem .6rem; background:transparent; border:1px solid transparent; color:var(--parch-mid); font-family:var(--text); font-size:.95rem; cursor:pointer; border-radius:3px; }
+  .subj-alt:hover { border-color:var(--border); color:var(--parch); }
+  .ai-bar { background:rgba(91,168,196,.06); border:1px solid rgba(91,168,196,.25); border-radius:var(--radius); padding:.75rem .9rem; margin-bottom:1rem; }
+  .ai-bar h3 { color:var(--cav-glow); margin-bottom:.4rem; }
+  .sticky-bottom { position:sticky; bottom:0; background:linear-gradient(transparent, var(--ink) 30%); padding:1rem 0 .5rem; margin-top:1rem; }
 
-  /* ── MAIN APP ── */
-  #app {
-    display: none;
-    position: relative;
-    z-index: 1;
-    max-width: 540px;
-    margin: 0 auto;
-    padding: 1.5rem 1.25rem 4rem;
-    animation: fadeIn 0.5s ease;
-  }
-  #app.visible { display: block; }
+  /* ── Modal ── */
+  #modal { position:fixed; inset:0; background:rgba(10,8,6,.75); z-index:200; display:none; align-items:center; justify-content:center; padding:1rem; }
+  #modal.visible { display:flex; }
+  .modal-box { background:var(--ink-mid); border:1px solid var(--border-strong); border-radius:6px; width:100%; max-width:560px; max-height:92vh; overflow:auto; padding:1.5rem; animation:fadeIn .25s ease; }
+  .modal-box h2 { margin-bottom:.75rem; }
+  .modal-actions { display:flex; gap:.5rem; justify-content:flex-end; margin-top:1.25rem; flex-wrap:wrap; }
+  #toast { position:fixed; bottom:1.5rem; left:50%; transform:translateX(-50%); background:var(--ink-soft); border:1px solid var(--border-strong); color:var(--parch); padding:.7rem 1.2rem; border-radius:var(--radius); z-index:300; opacity:0; transition:opacity .25s; pointer-events:none; max-width:90vw; text-align:center; }
+  #toast.visible { opacity:1; }
+  @media (max-width:860px) { #toast { bottom:5rem; } }
 
-  /* ── HEADER ── */
-  .app-header {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: 2rem 0 1.5rem;
-    gap: 0.3rem;
-    border-bottom: 1px solid var(--border);
-    margin-bottom: 1.75rem;
-  }
-  .app-title {
-    font-family: 'Cormorant Garamond', serif;
-    font-size: 1.6rem;
-    font-weight: 300;
-    letter-spacing: 0.12em;
-    color: var(--brass-light);
-  }
-  .app-sub {
-    font-size: 0.8rem;
-    letter-spacing: 0.1em;
-    color: var(--parch-dark);
-    text-transform: uppercase;
-  }
+  /* ── Charts ── */
+  .chart { width:100%; height:auto; display:block; }
+  .chart text { font-family:var(--text); fill:var(--parch-dim); font-size:11px; }
+  .chart .grid-line { stroke:rgba(245,234,208,.08); }
+  .legend { display:flex; gap:1rem; font-size:.8rem; color:var(--parch-dark); margin:.4rem 0 .2rem; }
+  .legend i { display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:.35rem; vertical-align:-1px; }
+  .tooltip { position:fixed; pointer-events:none; background:var(--ink-soft); border:1px solid var(--border-strong); color:var(--parch); padding:.4rem .6rem; font-size:.8rem; border-radius:3px; z-index:400; display:none; white-space:nowrap; }
 
-  /* ── STATUS BAR ── */
-  .status-bar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    background: var(--ink-mid);
-    border: 1px solid var(--border);
-    border-radius: 3px;
-    padding: 0.7rem 1rem;
-    margin-bottom: 1.5rem;
-    font-size: 0.85rem;
-  }
-  .status-item { display: flex; flex-direction: column; gap: 0.1rem; }
-  .status-label { color: var(--parch-dark); font-size: 0.72rem; letter-spacing: 0.07em; text-transform: uppercase; }
-  .status-value { color: var(--parch); font-weight: 600; }
-  .status-value.cav { color: var(--cav-glow); }
+  /* ── Plan timeline ── */
+  .plan-item { display:grid; grid-template-columns:90px 1fr auto; gap:1rem; align-items:center; padding:.7rem 0; border-bottom:1px solid rgba(184,134,11,.1); }
+  .plan-item .date { font-family:var(--serif); font-size:1.05rem; color:var(--brass-light); line-height:1.15; }
+  .plan-item .date small { display:block; font-family:var(--text); font-size:.72rem; color:var(--parch-dim); letter-spacing:.08em; text-transform:uppercase; }
+  .plan-item.past { opacity:.6; }
+  .plan-item.due .date { color:var(--cav-glow); }
+  @media (max-width:600px) { .plan-item { grid-template-columns:70px 1fr; } .plan-item .acts { grid-column:1/-1; } }
 
-  /* ── CARDS ── */
-  .card {
-    background: var(--ink-mid);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    overflow: hidden;
-    margin-bottom: 1.25rem;
-  }
-  .card-head {
-    background: var(--ink-soft);
-    padding: 0.65rem 1rem;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    border-bottom: 1px solid var(--border);
-  }
-  .card-head h2 {
-    font-family: 'Cormorant Garamond', serif;
-    font-size: 0.85rem;
-    font-weight: 600;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--brass-light);
-  }
-  .card-head .glyph { color: var(--brass); opacity: 0.7; font-size: 0.9rem; }
-  .card-body { padding: 1rem; }
-
-  /* ── FORM ELEMENTS ── */
-  label {
-    display: block;
-    font-size: 0.78rem;
-    letter-spacing: 0.07em;
-    text-transform: uppercase;
-    color: var(--parch-dark);
-    margin-bottom: 0.4rem;
-    margin-top: 0.9rem;
-  }
-  label:first-child { margin-top: 0; }
-
-  textarea, input[type="text"], input[type="password"], select {
-    width: 100%;
-    background: var(--ink);
-    border: 1px solid var(--border);
-    border-radius: 3px;
-    padding: 0.75rem 0.9rem;
-    color: var(--parch);
-    font-family: 'Crimson Pro', serif;
-    font-size: 1rem;
-    outline: none;
-    transition: border-color 0.2s;
-    resize: vertical;
-  }
-  textarea:focus, input:focus, select:focus { border-color: var(--brass); }
-  textarea::placeholder, input::placeholder { color: var(--parch-dark); opacity: 0.4; }
-  select { appearance: none; cursor: pointer; }
-  select option { background: var(--ink-mid); }
-
-  /* ── TOGGLE ── */
-  .toggle-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0.5rem 0;
-    margin-top: 0.5rem;
-  }
-  .toggle-label { font-size: 0.9rem; color: var(--parch-mid); }
-  .toggle {
-    position: relative;
-    width: 44px; height: 24px;
-    flex-shrink: 0;
-  }
-  .toggle input { opacity: 0; width: 0; height: 0; }
-  .slider {
-    position: absolute;
-    inset: 0;
-    background: var(--ink-soft);
-    border: 1px solid var(--border);
-    border-radius: 24px;
-    cursor: pointer;
-    transition: background 0.2s;
-  }
-  .slider::before {
-    content: '';
-    position: absolute;
-    width: 16px; height: 16px;
-    left: 3px; top: 3px;
-    background: var(--parch-dark);
-    border-radius: 50%;
-    transition: transform 0.2s, background 0.2s;
-  }
-  .toggle input:checked + .slider { background: rgba(184,134,11,0.3); border-color: var(--brass); }
-  .toggle input:checked + .slider::before { transform: translateX(20px); background: var(--brass-light); }
-
-  .discount-fields {
-    display: none;
-    padding-top: 0.5rem;
-    border-top: 1px solid var(--border);
-    margin-top: 0.75rem;
-  }
-  .discount-fields.visible { display: block; }
-
-  /* ── BUTTONS ── */
-  .btn {
-    width: 100%;
-    padding: 0.9rem 1.5rem;
-    border: none;
-    border-radius: 3px;
-    font-family: 'Cormorant Garamond', serif;
-    font-size: 1.05rem;
-    font-weight: 600;
-    letter-spacing: 0.08em;
-    cursor: pointer;
-    transition: all 0.2s;
-    margin-top: 1rem;
-    position: relative;
-    overflow: hidden;
-  }
-  .btn-primary {
-    background: var(--brass);
-    color: var(--ink);
-  }
-  .btn-primary:hover { background: var(--brass-light); }
-  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
-
-  .btn-send {
-    background: linear-gradient(135deg, #1a4a1a, #2d6a2d);
-    color: #90d490;
-    border: 1px solid rgba(100,200,100,0.3);
-    font-size: 1.1rem;
-  }
-  .btn-send:hover { background: linear-gradient(135deg, #2d6a2d, #3d8a3d); }
-  .btn-send:disabled { opacity: 0.5; cursor: not-allowed; }
-
-  .btn-ghost {
-    background: transparent;
-    color: var(--parch-dark);
-    border: 1px solid var(--border);
-    font-size: 0.9rem;
-    margin-top: 0.5rem;
-  }
-  .btn-ghost:hover { border-color: var(--brass); color: var(--brass-light); }
-
-  /* ── PREVIEW PANEL ── */
-  #preview-panel {
-    display: none;
-    animation: slideUp 0.4s ease;
-  }
-  #preview-panel.visible { display: block; }
-
-  .preview-subject {
-    font-family: 'Cormorant Garamond', serif;
-    font-size: 1.3rem;
-    font-weight: 600;
-    color: var(--brass-light);
-    margin-bottom: 0.25rem;
-    line-height: 1.3;
-  }
-  .preview-preview-text {
-    font-size: 0.85rem;
-    color: var(--parch-dark);
-    font-style: italic;
-    margin-bottom: 1rem;
-    padding-bottom: 0.75rem;
-    border-bottom: 1px solid var(--border);
-  }
-  .preview-body {
-    font-size: 1rem;
-    line-height: 1.7;
-    color: var(--parch-mid);
-    white-space: pre-wrap;
-    font-family: 'Crimson Pro', serif;
-  }
-
-  .edit-field {
-    width: 100%;
-    background: var(--ink);
-    border: 1px solid var(--border);
-    border-radius: 3px;
-    padding: 0.75rem;
-    color: var(--parch);
-    font-family: 'Crimson Pro', serif;
-    font-size: 1rem;
-    outline: none;
-    resize: vertical;
-    transition: border-color 0.2s;
-    margin-bottom: 0.5rem;
-  }
-  .edit-field:focus { border-color: var(--brass); }
-
-  /* ── STATUS MESSAGES ── */
-  .msg {
-    padding: 0.75rem 1rem;
-    border-radius: 3px;
-    font-size: 0.9rem;
-    margin-top: 0.75rem;
-    display: none;
-  }
-  .msg.visible { display: block; }
-  .msg-error { background: rgba(200,75,32,0.15); border: 1px solid rgba(200,75,32,0.3); color: #e08060; }
-  .msg-success { background: rgba(45,106,45,0.15); border: 1px solid rgba(45,106,45,0.3); color: #90d490; }
-  .msg-info { background: rgba(91,168,196,0.1); border: 1px solid rgba(91,168,196,0.2); color: var(--cav-glow); }
-
-  /* ── LOADING ── */
-  .loading-dots {
-    display: inline-flex;
-    gap: 4px;
-    align-items: center;
-    vertical-align: middle;
-  }
-  .loading-dots span {
-    width: 5px; height: 5px;
-    background: currentColor;
-    border-radius: 50%;
-    animation: pulse 1.2s ease infinite;
-    opacity: 0.4;
-  }
-  .loading-dots span:nth-child(2) { animation-delay: 0.2s; }
-  .loading-dots span:nth-child(3) { animation-delay: 0.4s; }
-
-  /* ── DIVIDER ── */
-  .divider {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    margin: 1.5rem 0;
-    color: var(--parch-dark);
-    font-size: 0.75rem;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-  }
-  .divider::before, .divider::after {
-    content: '';
-    flex: 1;
-    height: 1px;
-    background: var(--border);
-  }
-
-  /* ── SENT BADGE ── */
-  .sent-confirm {
-    text-align: center;
-    padding: 2rem 1rem;
-    display: none;
-  }
-  .sent-confirm.visible { display: block; }
-  .sent-glyph {
-    font-size: 2.5rem;
-    margin-bottom: 0.75rem;
-    display: block;
-    animation: float 3s ease-in-out infinite;
-  }
-  .sent-title {
-    font-family: 'Cormorant Garamond', serif;
-    font-size: 1.4rem;
-    color: var(--brass-light);
-    margin-bottom: 0.5rem;
-  }
-  .sent-sub { color: var(--parch-dark); font-size: 0.9rem; }
-
-  /* ── ANIMATIONS ── */
-  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-  @keyframes slideUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
-  @keyframes pulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
-  @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
-
-  /* ── ORNAMENT ── */
-  .ornament {
-    text-align: center;
-    color: var(--brass);
-    opacity: 0.4;
-    font-size: 1rem;
-    letter-spacing: 0.3em;
-    margin: 0.25rem 0;
-  }
+  .tpl-card { background:var(--ink); border:1px solid var(--border); border-radius:var(--radius); padding:1rem; display:flex; flex-direction:column; gap:.4rem; cursor:pointer; transition:border-color .15s; }
+  .tpl-card:hover { border-color:var(--brass); }
+  .tpl-card .cat { font-size:.68rem; letter-spacing:.12em; text-transform:uppercase; color:var(--cav); }
+  .tpl-card .n { font-family:var(--serif); font-size:1.2rem; color:var(--brass-light); }
+  .tpl-card .p { font-size:.88rem; color:var(--parch-dark); flex:1; }
+  .health { height:6px; background:var(--ink-line); border-radius:3px; overflow:hidden; margin-top:.4rem; }
+  .health i { display:block; height:100%; background:var(--moss); border-radius:3px; }
+  .sugg { border-left:3px solid var(--cav); padding-left:.9rem; }
+  .sugg.draft { border-left-color:var(--brass); }
+  .sugg.insight { border-left-color:var(--cav); }
+  @keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:none} }
+  .fade { animation:fadeIn .3s ease; }
+  #loading { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; color:var(--brass); letter-spacing:.4em; font-family:var(--serif); z-index:99; background:var(--ink); }
 </style>
 </head>
 <body>
 
-<div class="bg-glow"></div>
-<div class="bg-glow-2"></div>
+<div id="loading">✦ ✦ ✦</div>
 
-<!-- ═══════════════════════ LOCK SCREEN ═══════════════════════ -->
-<div id="lock-screen">
-  <div>
+<!-- ═══════════ AUTH ═══════════ -->
+<div id="auth" class="hidden">
+  <div class="auth-box">
     <div class="ornament">✦ ✦ ✦</div>
-    <h1 class="lock-title">The Ink Room</h1>
-    <div class="ornament">✦ ✦ ✦</div>
-  </div>
-  <p class="lock-sub">J.D. Siler · Author Communications</p>
-  <div class="lock-input-wrap">
-    <input class="lock-input" type="password" id="secret-input" placeholder="Enter your key" autocomplete="current-password">
-    <div class="lock-error" id="lock-error"></div>
-    <button class="btn btn-primary" onclick="unlock()" style="margin-top:0;">Enter</button>
+    <h1>INK</h1>
+    <div class="tag">Author list marketing</div>
+    <button class="btn btn-primary btn-block" onclick="ink.signInGoogle()">Continue with Google</button>
+    <div class="divider">or with email</div>
+    <input type="email" id="auth-email" placeholder="you@example.com" autocomplete="email">
+    <input type="password" id="auth-pass" placeholder="Password" autocomplete="current-password">
+    <button class="btn btn-block" onclick="ink.signInEmail()">Sign in</button>
+    <button class="btn btn-ghost btn-block" onclick="ink.signUpEmail()">Create an account</button>
+    <button class="btn btn-ghost btn-sm" onclick="ink.resetPassword()">Forgot password?</button>
+    <div class="err" id="auth-err"></div>
+    <p class="dim small" style="margin-top:1.5rem">Your list, your readers, your voice.<br>Ink never sends anything without your approval.</p>
   </div>
 </div>
 
-<!-- ═══════════════════════ MAIN APP ═══════════════════════════ -->
+<!-- ═══════════ APP ═══════════ -->
 <div id="app">
-
-  <div class="app-header">
-    <div class="ornament" style="opacity:0.6;">✦ ✦ ✦</div>
-    <h1 class="app-title">The Ink Room</h1>
-    <p class="app-sub">Sky Bridge Saga · Author Mailer</p>
-  </div>
-
-  <!-- Status Bar -->
-  <div class="status-bar" id="status-bar">
-    <div class="status-item">
-      <span class="status-label">Subscribers</span>
-      <span class="status-value cav" id="sub-count">—</span>
-    </div>
-    <div class="status-item" style="text-align:center;">
-      <span class="status-label">Last Sent</span>
-      <span class="status-value" id="last-sent-date">—</span>
-    </div>
-    <div class="status-item" style="text-align:right;">
-      <span class="status-label">Subject</span>
-      <span class="status-value" id="last-subject" style="font-size:0.78rem;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">—</span>
-    </div>
-  </div>
-
-  <!-- ── COMPOSE PANEL ── -->
-  <div id="compose-panel">
-
-    <div class="card">
-      <div class="card-head"><span class="glyph">✍</span><h2>This Month's Letter</h2></div>
-      <div class="card-body">
-
-        <label for="update-text">What's on your mind? <span style="font-size:0.85em;text-transform:none;letter-spacing:0;">(two sentences is enough — or leave blank)</span></label>
-        <textarea id="update-text" rows="4" placeholder="e.g. Book 2 is taking shape. The dissolving cove scene is written and it's exactly right."></textarea>
-
-        <label for="tone-select">Tone this month</label>
-        <select id="tone-select">
-          <option value="warm and story-rich">Warm & story-rich</option>
-          <option value="quietly exciting — something is building">Something is building</option>
-          <option value="reflective and personal — the author behind the work">Reflective & personal</option>
-          <option value="worldbuilding deep-dive — immerse the reader in Stella">Worldbuilding deep-dive</option>
-          <option value="gentle urgency — now is a good moment to read">Gentle urgency</option>
-        </select>
-
-        <div class="toggle-row" style="margin-top:1rem;">
-          <span class="toggle-label">Include a discount offer</span>
-          <label class="toggle">
-            <input type="checkbox" id="discount-toggle" onchange="toggleDiscount()">
-            <span class="slider"></span>
-          </label>
-        </div>
-
-        <div class="discount-fields" id="discount-fields">
-          <label for="discount-code">Discount code</label>
-          <input type="text" id="discount-code" placeholder="e.g. EMBERS20">
-          <label for="discount-note">What it gets them</label>
-          <input type="text" id="discount-note" placeholder="e.g. 20% off Embers of Elekra on Folio this month only">
-        </div>
-
-        <button class="btn btn-primary" id="generate-btn" onclick="generateEmail()">
-          Generate Letter
-        </button>
-
-        <div class="msg msg-error" id="generate-error"></div>
-        <div class="msg msg-info" id="generate-info"></div>
-
-      </div>
-    </div>
-
-    <!-- ── PREVIEW PANEL ── -->
-    <div id="preview-panel" class="card">
-      <div class="card-head"><span class="glyph">◉</span><h2>Preview & Edit</h2></div>
-      <div class="card-body">
-
-        <label>Subject line</label>
-        <input type="text" class="edit-field" id="edit-subject" style="font-family:'Cormorant Garamond',serif;font-size:1.1rem;">
-
-        <label>Preview text <span style="font-size:0.85em;text-transform:none;letter-spacing:0;">(shown after subject in inbox)</span></label>
-        <input type="text" class="edit-field" id="edit-preview-text">
-
-        <label>Body</label>
-        <textarea class="edit-field" id="edit-body" rows="14"></textarea>
-
-        <div class="divider">Looks right?</div>
-
-        <button class="btn btn-send" id="send-btn" onclick="sendEmail()">
-          Send to List
-        </button>
-        <button class="btn btn-ghost" onclick="regenerate()">Generate a different version</button>
-
-        <div class="msg msg-error" id="send-error"></div>
-        <div class="msg msg-success" id="send-success"></div>
-
-      </div>
-    </div>
-
-    <!-- ── SENT CONFIRMATION ── -->
-    <div class="sent-confirm" id="sent-confirm">
-      <span class="sent-glyph">✉︎</span>
-      <div class="sent-title">Letter sent.</div>
-      <p class="sent-sub" id="sent-detail"></p>
-      <button class="btn btn-ghost" onclick="resetForm()" style="max-width:200px;margin:1.5rem auto 0;">Write another</button>
-    </div>
-
-  </div>
-
+  <nav class="side">
+    <div class="brand"><div class="t">INK</div><div class="s" id="brand-sub">Author mailer</div></div>
+    <a class="nl" href="#dashboard" data-nav="dashboard"><span class="g">◈</span>Today</a>
+    <a class="nl" href="#approvals" data-nav="approvals"><span class="g">✓</span>Approvals<span class="badge hidden" id="badge-approvals"></span></a>
+    <a class="nl" href="#campaigns" data-nav="campaigns"><span class="g">✉</span>Letters</a>
+    <a class="nl" href="#plan" data-nav="plan"><span class="g">◷</span>Plan</a>
+    <a class="nl" href="#readers" data-nav="readers"><span class="g">☺</span>Readers</a>
+    <a class="nl" href="#templates" data-nav="templates"><span class="g">❧</span>Templates</a>
+    <a class="nl" href="#automations" data-nav="automations"><span class="g">⟳</span>Welcome series</a>
+    <a class="nl" href="#analytics" data-nav="analytics"><span class="g">▤</span>Analytics</a>
+    <a class="nl" href="#settings" data-nav="settings"><span class="g">⚙</span>Settings</a>
+    <div class="foot"><b id="foot-name">—</b><a href="#" onclick="ink.signOut();return false" class="dim">Sign out</a></div>
+  </nav>
+  <main id="main"></main>
+  <nav class="bottom">
+    <a href="#dashboard" data-nav="dashboard"><span class="g">◈</span>Today</a>
+    <a href="#approvals" data-nav="approvals"><span class="g">✓</span>Approve<span class="badge hidden" id="badge-approvals-m"></span></a>
+    <a href="#campaigns" data-nav="campaigns"><span class="g">✉</span>Letters</a>
+    <a href="#plan" data-nav="plan"><span class="g">◷</span>Plan</a>
+    <a href="#readers" data-nav="readers"><span class="g">☺</span>Readers</a>
+    <a href="#settings" data-nav="settings"><span class="g">⚙</span>More</a>
+  </nav>
 </div>
 
-<script>
-  const WORKER = 'https://jdsiler-author-mailer.jacobdsiler.workers.dev';
-  let adminSecret = '';
-  let currentEmail = null;
+<div id="modal" onclick="if(event.target===this)ink.closeModal()"><div class="modal-box" id="modal-box"></div></div>
+<div id="toast"></div>
+<div class="tooltip" id="tooltip"></div>
 
-  // ── LOCK ──────────────────────────────────────────────────────────────────
+<script src="shared/render.js"></script>
+<script src="shared/templates.js"></script>
+<script type="module">
+/* ═══════════════════════════════════════════════════════════════════════
+   INK — app
+   ═══════════════════════════════════════════════════════════════════════ */
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, signOut } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+import { getFirestore, doc, collection, getDoc, getDocs, setDoc, updateDoc, deleteDoc, onSnapshot, query, where, orderBy, limit, writeBatch, arrayUnion } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
-  document.getElementById('secret-input').addEventListener('keydown', e => {
-    if (e.key === 'Enter') unlock();
+const WORKER = 'https://ink-worker.jacobdsiler.workers.dev';
+const firebaseConfig = { apiKey: "AIzaSyDxLI57pgS9WX1ekMerbcx8M6aVeWacpy0", authDomain: "auth.jacobsiler.com", projectId: "miscellaneous-117e9", storageBucket: "miscellaneous-117e9.firebasestorage.app", messagingSenderId: "514858431339", appId: "1:514858431339:web:8b3acbe89966b45fe3922e" };
+const fb = initializeApp(firebaseConfig);
+const auth = getAuth(fb);
+const db = getFirestore(fb);
+const T = InkTemplates, R = InkRender;
+
+const S = { user: null, author: null, campaigns: [], plans: [], suggestions: [], welcome: null, subs: null, metrics: [], unsub: [], view: '', joinUrl: '' };
+const $ = (id) => document.getElementById(id);
+const esc = R.escapeHtml;
+const nowIso = () => new Date().toISOString();
+const uid = () => S.user.uid;
+const fmtDate = (iso, opts) => iso ? new Date(iso).toLocaleDateString('en-IE', opts || { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
+const fmtDateTime = (iso) => iso ? new Date(iso).toLocaleString('en-IE', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—';
+const pct = (a, b) => b ? Math.round(1000 * (a || 0) / b) / 10 + '%' : '—';
+const rid = () => Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6);
+const dateStr = (d) => new Date(d).toISOString().slice(0, 10);
+const addDaysStr = (dstr, n) => dateStr(new Date(dstr + 'T12:00:00Z').getTime() + n * 864e5);
+const tz = () => (S.author && S.author.timezone) || Intl.DateTimeFormat().resolvedOptions().timeZone || 'Europe/Dublin';
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+function toast(msg, ms = 2600) { const t = $('toast'); t.textContent = msg; t.classList.add('visible'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('visible'), ms); }
+function busy(btn, on, label) { if (!btn) return; if (on) { btn.dataset.label = btn.innerHTML; btn.disabled = true; btn.innerHTML = (label || 'Working') + ' <span class="dots"><span></span><span></span><span></span></span>'; } else { btn.disabled = false; btn.innerHTML = btn.dataset.label || btn.innerHTML; } }
+function showMsg(id, text, kind = 'error') { const el = $(id); if (!el) return; el.className = `msg msg-${kind} visible`; el.textContent = text; }
+function hideMsg(id) { const el = $(id); if (el) el.classList.remove('visible'); }
+
+async function api(path, body, method) {
+  const token = await S.user.getIdToken();
+  const res = await fetch(WORKER + path, { method: method || (body ? 'POST' : 'GET'), headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: body ? JSON.stringify(body) : undefined });
+  let data; try { data = await res.json(); } catch { data = { ok: false, error: 'Bad response from server' }; }
+  if (!res.ok || data.ok === false) throw new Error(data.error || ('Request failed (' + res.status + ')'));
+  return data;
+}
+async function subscriberId(email) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(email).trim().toLowerCase()));
+  return btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '').slice(0, 20);
+}
+const aDoc = (...p) => doc(db, 'authors', uid(), ...p);
+const aCol = (...p) => collection(db, 'authors', uid(), ...p);
+
+/* ── modal ── */
+function modal(html) { $('modal-box').innerHTML = html; $('modal').classList.add('visible'); }
+function closeModal() { $('modal').classList.remove('visible'); }
+function confirmModal(title, text, okLabel = 'Confirm', danger = false) {
+  return new Promise(res => {
+    modal(`<h2>${esc(title)}</h2><p>${text}</p><div class="modal-actions"><button class="btn btn-ghost" id="m-no">Cancel</button><button class="btn ${danger ? 'btn-danger' : 'btn-primary'}" id="m-ok">${esc(okLabel)}</button></div>`);
+    $('m-no').onclick = () => { closeModal(); res(false); };
+    $('m-ok').onclick = () => { closeModal(); res(true); };
   });
+}
 
-  async function unlock() {
-    const input = document.getElementById('secret-input');
-    const err = document.getElementById('lock-error');
-    const secret = input.value.trim();
-    if (!secret) return;
+/* ═══════════════════════════ AUTH ═══════════════════════════ */
+const ink = {};
+window.ink = ink;
+ink.closeModal = closeModal;
+ink.signInGoogle = async () => { try { await signInWithPopup(auth, new GoogleAuthProvider()); } catch (e) { $('auth-err').textContent = e.message; } };
+ink.signInEmail = async () => { try { await signInWithEmailAndPassword(auth, $('auth-email').value.trim(), $('auth-pass').value); } catch (e) { $('auth-err').textContent = friendlyAuth(e); } };
+ink.signUpEmail = async () => { try { await createUserWithEmailAndPassword(auth, $('auth-email').value.trim(), $('auth-pass').value); } catch (e) { $('auth-err').textContent = friendlyAuth(e); } };
+ink.resetPassword = async () => { const e = $('auth-email').value.trim(); if (!e) return $('auth-err').textContent = 'Enter your email first.'; try { await sendPasswordResetEmail(auth, e); $('auth-err').textContent = 'Reset email sent.'; } catch (x) { $('auth-err').textContent = friendlyAuth(x); } };
+ink.signOut = () => signOut(auth);
+function friendlyAuth(e) { const c = e.code || ''; if (c.includes('wrong-password') || c.includes('invalid-credential')) return 'Email or password is not right.'; if (c.includes('user-not-found')) return 'No account with that email — create one below.'; if (c.includes('weak-password')) return 'Choose a longer password (6+ characters).'; if (c.includes('email-already-in-use')) return 'That email already has an account — sign in instead.'; return e.message; }
 
-    err.textContent = 'Checking…';
-    try {
-      const res = await fetch(`${WORKER}/status`, {
-        headers: { 'X-Admin-Secret': secret }
-      });
-      if (res.status === 401) {
-        err.textContent = 'That key isn\'t right.';
-        input.value = '';
-        return;
-      }
-      const data = await res.json();
-      adminSecret = secret;
-      document.getElementById('lock-screen').style.display = 'none';
-      document.getElementById('app').classList.add('visible');
-      populateStatus(data);
-    } catch (e) {
-      err.textContent = 'Could not reach the Worker. Check your connection.';
+let unsubAuthor = null;
+onAuthStateChanged(auth, async (user) => {
+  $('loading').style.display = 'none';
+  S.unsub.forEach(u => u()); S.unsub = [];
+  if (!user) { S.user = null; $('auth').classList.remove('hidden'); $('app').classList.remove('visible'); return; }
+  S.user = user; $('auth').classList.add('hidden');
+  $('foot-name').textContent = user.email || '';
+  const snap = await getDoc(aDoc());
+  if (!snap.exists() || !snap.data().onboarded) { $('app').classList.add('visible'); return renderOnboarding(snap.exists() ? snap.data() : {}); }
+  startApp();
+});
+
+function startApp() {
+  $('app').classList.add('visible');
+  S.unsub.push(onSnapshot(aDoc(), s => { S.author = s.data() || {}; $('brand-sub').textContent = S.author.penName || 'Author mailer'; if (S.view === 'dashboard' || S.view === 'settings') render(); }));
+  S.unsub.push(onSnapshot(query(aCol('campaigns'), orderBy('updatedAt', 'desc'), limit(300)), s => { S.campaigns = s.docs.map(d => ({ id: d.id, ...d.data() })); if (['dashboard', 'campaigns', 'analytics', 'campaign', 'plan'].includes(S.view)) render(); }));
+  S.unsub.push(onSnapshot(query(aCol('plans'), orderBy('createdAt', 'desc'), limit(50)), s => { S.plans = s.docs.map(d => ({ id: d.id, ...d.data() })); if (['dashboard', 'plan'].includes(S.view)) render(); }));
+  S.unsub.push(onSnapshot(query(aCol('suggestions'), where('status', '==', 'open'), limit(100)), s => { S.suggestions = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')); const n = S.suggestions.length; ['badge-approvals', 'badge-approvals-m'].forEach(id => { $(id).textContent = n; $(id).classList.toggle('hidden', !n); }); if (['dashboard', 'approvals'].includes(S.view)) render(); }));
+  S.unsub.push(onSnapshot(aDoc('automations', 'welcome'), s => { S.welcome = s.exists() ? s.data() : null; if (['automations', 'dashboard'].includes(S.view)) render(); }));
+  window.addEventListener('hashchange', render);
+  if (!location.hash || location.hash === '#') location.hash = '#dashboard';
+  render();
+}
+
+/* ═══════════════════════════ ONBOARDING ═══════════════════════════ */
+function renderOnboarding(existing) {
+  S.view = 'onboarding';
+  const a = existing || {};
+  $('main').innerHTML = `
+  <div class="wizard fade">
+    <div style="text-align:center;margin-bottom:1.5rem"><div class="ornament">✦ ✦ ✦</div><h1 style="margin:.5rem 0">Welcome to Ink</h1><p class="muted">Five minutes of setup, then Ink does the remembering.</p></div>
+    <div class="card"><div class="card-head"><span class="g">✍</span><h3>You, the author</h3></div><div class="card-body">
+      <div class="row"><div><label>Pen name</label><input type="text" id="ob-pen" value="${esc(a.penName || '')}" placeholder="e.g. J.D. Siler"></div>
+      <div><label>Genre <span class="hint">(what readers would call it)</span></label><input type="text" id="ob-genre" value="${esc(a.genre || '')}" placeholder="e.g. steampunk literary fantasy"></div></div>
+      <label>Your sign-up address <span class="hint">(letters, numbers, hyphens)</span></label>
+      <div class="inline"><span class="dim small">${esc(WORKER)}/join/</span><input type="text" id="ob-slug" value="${esc(a.slug || '')}" placeholder="jd-siler" style="max-width:220px"></div>
+      <label>Reply-to email <span class="hint">(where reader replies land)</span></label><input type="email" id="ob-reply" value="${esc(a.replyTo || S.user.email || '')}">
+      <label>Postal address <span class="hint">(required by anti-spam law in every marketing email — a PO box is fine)</span></label><input type="text" id="ob-addr" value="${esc(a.postalAddress || '')}" placeholder="e.g. JAZ Games, PO Box 123, Mullingar, Co. Westmeath, Ireland">
+      <label>Website</label><input type="url" id="ob-web" value="${esc(a.webUrl || '')}" placeholder="https://">
+    </div></div>
+    <div class="card"><div class="card-head"><span class="g">❧</span><h3>Your voice</h3></div><div class="card-body">
+      <label>How you write to readers <span class="hint">(Ink's ghostwriter follows this closely)</span></label>
+      <textarea id="ob-voice" placeholder="e.g. Warm, quiet, a little wry. Short paragraphs. I talk about the writing life and the world of the books, never hype. I sign off 'Warmly, J.D.'">${esc(a.voice || '')}</textarea>
+      <label>About you <span class="hint">(a sentence or two)</span></label>
+      <textarea id="ob-bio" style="min-height:60px">${esc(a.bio || '')}</textarea>
+      <label>Your books <span class="hint">(one per line: Title | Series | status | link)</span></label>
+      <textarea id="ob-books" placeholder="Embers of Elekra | Sky Bridge Saga | published | https://…&#10;Resonance | Sky Bridge Saga | coming 2026 |">${esc((a.books || []).map(b => [b.title, b.series, b.status, b.link].join(' | ')).join('\n'))}</textarea>
+    </div></div>
+    <div class="card"><div class="card-head"><span class="g">◷</span><h3>Rhythm</h3></div><div class="card-body">
+      <div class="row"><div><label>Timezone</label><input type="text" id="ob-tz" value="${esc(a.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone)}"></div>
+      <div><label>Nudge me at <span class="hint">(hour, 24h)</span></label><input type="number" id="ob-hour" min="0" max="23" value="${a.nudgeHour ?? 8}"></div></div>
+      <div class="toggle-row" style="margin-top:.75rem"><div><b>Double opt-in</b><div class="small muted">New readers confirm by email before they are added. Cleaner list, slightly fewer sign-ups.</div></div><label class="toggle"><input type="checkbox" id="ob-doi" ${a.doubleOptIn ? 'checked' : ''}><span class="s"></span></label></div>
+      <div class="toggle-row"><div><b>Welcome series</b><div class="small muted">Three pre-written welcome letters go to every new reader over a week. You can edit them any time.</div></div><label class="toggle"><input type="checkbox" id="ob-welcome" checked><span class="s"></span></label></div>
+    </div></div>
+    <div class="msg msg-error" id="ob-err"></div>
+    <button class="btn btn-primary btn-block" id="ob-go" onclick="ink.finishOnboarding()">Open my Ink room</button>
+  </div>`;
+}
+function parseBooks(text) { return text.split('\n').map(l => l.trim()).filter(Boolean).map(l => { const [title, series, status, link] = l.split('|').map(s => (s || '').trim()); return { title, series, status, link }; }).filter(b => b.title); }
+ink.finishOnboarding = async () => {
+  hideMsg('ob-err');
+  const penName = $('ob-pen').value.trim(), slug = $('ob-slug').value.trim().toLowerCase();
+  if (!penName) return showMsg('ob-err', 'A pen name is needed.');
+  if (slug.length < 3) return showMsg('ob-err', 'Choose a sign-up address of at least 3 characters.');
+  const btn = $('ob-go'); busy(btn, true, 'Setting up');
+  try {
+    const t = nowIso();
+    const data = {
+      penName, genre: $('ob-genre').value.trim(), replyTo: $('ob-reply').value.trim(), email: $('ob-reply').value.trim() || S.user.email, postalAddress: $('ob-addr').value.trim(), webUrl: $('ob-web').value.trim(),
+      voice: $('ob-voice').value.trim(), bio: $('ob-bio').value.trim(), books: parseBooks($('ob-books').value), timezone: $('ob-tz').value.trim() || 'Europe/Dublin', nudgeHour: Number($('ob-hour').value) || 8, sendHour: 9,
+      doubleOptIn: $('ob-doi').checked, fromName: penName, fromLocal: slug, onboarded: true, subscriberCount: 0, nudgeNextAt: t, createdAt: t, updatedAt: t,
+      brand: { accent: '#a66e22', heading: '#1c2b4a', bg: '#f4f1ea' }
+    };
+    await setDoc(aDoc(), data, { merge: true });
+    await api('/me/slug', { slug });
+    if ($('ob-welcome').checked) {
+      const steps = T.WELCOME_SEQUENCE.steps.map(s => { const tp = T.byId(s.templateId); return { delayDays: s.delayDays, subject: tp.subject, previewText: tp.previewText, body: tp.body }; });
+      await setDoc(aDoc('automations', 'welcome'), { name: 'Welcome series', trigger: 'subscribe', enabled: true, steps, updatedAt: t }, { merge: true });
     }
-  }
+    startApp();
+  } catch (e) { showMsg('ob-err', e.message); busy(btn, false); }
+};
 
-  // ── STATUS ────────────────────────────────────────────────────────────────
+/* ═══════════════════════════ ROUTER ═══════════════════════════ */
+function render() {
+  if (!S.user) return;
+  const h = (location.hash || '#dashboard').slice(1);
+  const [view, arg, arg2] = h.split('/');
+  S.view = view || 'dashboard';
+  document.querySelectorAll('[data-nav]').forEach(a => a.classList.toggle('active', a.dataset.nav === S.view || (S.view === 'campaign' && a.dataset.nav === 'campaigns') || (S.view === 'compose' && a.dataset.nav === 'campaigns')));
+  const views = { dashboard: renderDashboard, approvals: renderApprovals, campaigns: renderCampaigns, campaign: () => renderCampaign(arg), compose: () => startCompose(arg, arg2), plan: () => renderPlan(arg), readers: renderReaders, templates: renderTemplates, automations: renderAutomations, analytics: renderAnalytics, settings: renderSettings };
+  (views[S.view] || renderDashboard)();
+  if (S.view !== 'campaign') window.scrollTo(0, 0);
+}
+const head = (title, sub, actions = '') => `<div class="page-head"><div><h1>${title}</h1>${sub ? `<p>${sub}</p>` : ''}</div><div class="actions">${actions}</div></div>`;
 
-  function populateStatus(data) {
-    document.getElementById('sub-count').textContent =
-      data.subscriberCount != null ? data.subscriberCount.toLocaleString() : '—';
-    document.getElementById('last-sent-date').textContent =
-      data.lastSentDate ? formatDate(data.lastSentDate) : 'Never';
-    document.getElementById('last-subject').textContent =
-      data.lastSentSubject || '—';
-    document.getElementById('last-subject').title = data.lastSentSubject || '';
-  }
+/* ═══════════════════════════ DASHBOARD ═══════════════════════════ */
+function healthScore() {
+  const a = S.author || {}; let score = 0; const notes = [];
+  const sent = S.campaigns.filter(c => c.status === 'sent');
+  const daysSince = a.lastSentAt ? (Date.now() - new Date(a.lastSentAt).getTime()) / 864e5 : 999;
+  if (daysSince <= 35) { score += 30; } else notes.push(daysSince > 900 ? 'No letter sent yet.' : `Last letter was ${Math.round(daysSince)} days ago.`);
+  if (S.plans.some(p => p.status === 'active')) score += 20; else notes.push('No active plan.');
+  if (S.welcome && S.welcome.enabled) score += 15; else notes.push('Welcome series is off.');
+  const last3 = sent.slice(0, 3); const or = last3.length ? last3.reduce((s, c) => s + ((c.stats?.uniqueOpens || 0) / Math.max(1, c.stats?.sent || 1)), 0) / last3.length : 0;
+  if (last3.length) { if (or >= .35) score += 25; else if (or >= .2) { score += 12; notes.push('Open rate is below the 35% benchmark.'); } else notes.push('Open rate is weak — try more personal subject lines.'); }
+  if (a.slug) score += 10; else notes.push('Set up your sign-up page.');
+  return { score, notes, openRate: or };
+}
+function renderDashboard() {
+  const a = S.author || {};
+  const h = healthScore();
+  const sent = S.campaigns.filter(c => c.status === 'sent');
+  const upcoming = planItemsUpcoming().slice(0, 4);
+  const sugg = S.suggestions.slice(0, 4);
+  const drafts = S.campaigns.filter(c => c.status === 'draft').slice(0, 3);
+  const scheduled = S.campaigns.filter(c => c.status === 'scheduled' || c.status === 'sending');
+  $('main').innerHTML = `
+  ${head(`Good ${new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 18 ? 'afternoon' : 'evening'}, ${esc(a.penName || '')}`, `${new Date().toLocaleDateString('en-IE', { weekday: 'long', day: 'numeric', month: 'long' })}`,
+    `<a class="btn btn-primary" href="#compose/monthly-letter">✍ Draft a letter</a><a class="btn" href="#readers">Add readers</a>`)}
+  <div class="tiles">
+    <div class="tile"><div class="l">Readers</div><div class="v cav">${(a.subscriberCount || 0).toLocaleString()}</div><div class="d">${growth30()}</div></div>
+    <div class="tile"><div class="l">Last letter</div><div class="v brass" style="font-size:1.3rem;padding-top:.3rem">${a.lastSentAt ? fmtDate(a.lastSentAt) : 'Never'}</div><div class="d" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.lastSentSubject || '')}</div></div>
+    <div class="tile"><div class="l">Avg open rate</div><div class="v">${sent.length ? Math.round(h.openRate * 100) + '%' : '—'}</div><div class="d">last ${Math.min(3, sent.length) || '—'} letters · benchmark 35%+</div></div>
+    <div class="tile"><div class="l">List health</div><div class="v" style="color:${h.score >= 70 ? '#a8d8a4' : h.score >= 40 ? 'var(--brass-light)' : '#f0a080'}">${h.score}</div><div class="health"><i style="width:${h.score}%;background:${h.score >= 70 ? 'var(--moss)' : h.score >= 40 ? 'var(--brass)' : 'var(--ember)'}"></i></div></div>
+  </div>
+  <div class="grid grid-2">
+    <div>
+      <div class="card"><div class="card-head"><span class="g">✓</span><h3>Needs your approval</h3><div class="right"><a class="btn btn-sm btn-ghost" href="#approvals">All</a></div></div><div class="card-body">
+        ${sugg.length ? sugg.map(suggHtml).join('') : `<div class="empty">Nothing waiting. ${h.notes[0] ? esc(h.notes[0]) : 'Ink will draft your next letter when it comes due.'}</div>`}
+      </div></div>
+      <div class="card"><div class="card-head"><span class="g">◷</span><h3>Up next</h3><div class="right"><a class="btn btn-sm btn-ghost" href="#plan">Plan</a></div></div><div class="card-body">
+        ${scheduled.map(c => `<div class="list-item"><div class="main"><div class="title">${esc(c.subject || c.title)}</div><div class="sub">${c.status === 'sending' ? 'Sending now' : 'Scheduled · ' + fmtDateTime(c.scheduledAt)}</div></div><a class="btn btn-sm" href="#campaign/${c.id}">Open</a></div>`).join('')}
+        ${upcoming.length ? upcoming.map(u => `<div class="list-item"><div class="main"><div class="title">${esc(u.it.title)}</div><div class="sub">${fmtDate(u.it.dueDate + 'T12:00:00Z', { weekday: 'short', day: 'numeric', month: 'short' })} · ${esc(u.plan.name)} · <span class="status ${u.it.status}">${u.it.status}</span></div></div>${u.it.campaignId ? `<a class="btn btn-sm" href="#campaign/${u.it.campaignId}">Open</a>` : `<button class="btn btn-sm" onclick="ink.draftPlanItem('${u.plan.id}','${u.it.id}',this)">Draft now</button>`}</div>`).join('') : (scheduled.length ? '' : `<div class="empty">No plan yet. <a href="#plan">Start one</a> and Ink will keep the schedule for you.</div>`)}
+      </div></div>
+    </div>
+    <div>
+      <div class="card"><div class="card-head"><span class="g">▤</span><h3>Reader growth · 30 days</h3></div><div class="card-body">${growthChart(30)}</div></div>
+      ${drafts.length ? `<div class="card"><div class="card-head"><span class="g">✍</span><h3>Drafts</h3></div><div class="card-body">${drafts.map(c => `<div class="list-item"><div class="main"><div class="title">${esc(c.subject || c.title || 'Untitled')}</div><div class="sub">edited ${fmtDate(c.updatedAt)}</div></div><a class="btn btn-sm" href="#campaign/${c.id}">Continue</a></div>`).join('')}</div></div>` : ''}
+      ${h.notes.length ? `<div class="card"><div class="card-head"><span class="g">❧</span><h3>Ink suggests</h3></div><div class="card-body">${h.notes.map(n => `<div class="list-item"><div class="main"><div class="sub" style="color:var(--parch-mid)">${esc(n)}</div></div></div>`).join('')}<div style="margin-top:.75rem"><button class="btn btn-sm" onclick="ink.runInsights(this)">Ask Ink for a full analysis</button></div></div></div>` : ''}
+    </div>
+  </div>`;
+  loadMetrics().then(() => { const el = document.querySelector('.card-body .chart'); if (el && S.view === 'dashboard') el.parentElement.innerHTML = growthChart(30); });
+}
+function growth30() { if (!S.metrics.length) return 'active readers'; const cut = dateStr(Date.now() - 30 * 864e5); const m = S.metrics.filter(d => d.id >= cut); const s = m.reduce((x, d) => x + (d.subscribed || 0), 0), u = m.reduce((x, d) => x + (d.unsubscribed || 0), 0); return `+${s} / −${u} in 30 days`; }
+async function loadMetrics() { if (S.metrics.length) return; const snap = await getDocs(query(aCol('metricsDaily'), orderBy('__name__', 'desc'), limit(180))); S.metrics = snap.docs.map(d => ({ id: d.id, ...d.data() })).reverse(); }
+function suggHtml(s) {
+  return `<div class="list-item sugg ${s.type}"><div class="main"><div class="title">${esc(s.title)}</div><div class="sub">${esc(s.body || '')}</div></div><div class="actions">${s.campaignId ? `<a class="btn btn-sm btn-primary" href="#campaign/${s.campaignId}">Review</a>` : ''}${s.actionType === 'send-reengage' ? `<a class="btn btn-sm btn-primary" href="#compose/re-engage">Draft it</a>` : ''}${s.actionType === 'add-plan' ? `<a class="btn btn-sm btn-primary" href="#plan">Plan</a>` : ''}<button class="btn btn-sm btn-ghost" onclick="ink.dismissSugg('${s.id}')">Dismiss</button></div></div>`;
+}
+ink.dismissSugg = async (id) => { await updateDoc(aDoc('suggestions', id), { status: 'dismissed', resolvedAt: nowIso() }); };
+ink.runInsights = async (btn) => { busy(btn, true, 'Analysing'); try { const r = await api('/ai/insights', {}); toast('Insights added to your approvals.'); location.hash = '#approvals'; } catch (e) { toast(e.message, 5000); } finally { busy(btn, false); } };
 
-  function formatDate(iso) {
-    const d = new Date(iso);
-    return d.toLocaleDateString('en-IE', { day: 'numeric', month: 'short', year: 'numeric' });
-  }
+/* ── charts (single hue for growth; two validated hues for rates) ── */
+function growthChart(days) {
+  const cut = dateStr(Date.now() - days * 864e5);
+  const byDay = {}; S.metrics.forEach(d => byDay[d.id] = d);
+  const pts = []; let cum = 0;
+  for (let i = days - 1; i >= 0; i--) { const d = dateStr(Date.now() - i * 864e5); const m = byDay[d] || {}; cum += (m.subscribed || 0) - (m.unsubscribed || 0); pts.push({ d, net: (m.subscribed || 0) - (m.unsubscribed || 0), cum, sub: m.subscribed || 0, un: m.unsubscribed || 0 }); }
+  if (!S.metrics.length) return `<div class="empty small">Growth appears here as readers join.</div>`;
+  const W = 520, H = 150, pl = 30, pb = 22, pt = 10;
+  const max = Math.max(1, ...pts.map(p => p.cum)); const min = Math.min(0, ...pts.map(p => p.cum));
+  const x = (i) => pl + i * (W - pl - 8) / (pts.length - 1); const y = (v) => pt + (H - pt - pb) * (1 - (v - min) / (max - min || 1));
+  const path = pts.map((p, i) => (i ? 'L' : 'M') + x(i).toFixed(1) + ' ' + y(p.cum).toFixed(1)).join(' ');
+  const area = path + ` L${x(pts.length - 1).toFixed(1)} ${y(min)} L${x(0)} ${y(min)} Z`;
+  const ticks = [min, Math.round((max + min) / 2), max];
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" onmousemove="ink.chartHover(event,this)" onmouseleave="ink.chartLeave()" data-pts='${esc(JSON.stringify(pts.map(p => ({ d: p.d, v: p.cum, s: p.sub, u: p.un }))))}'>
+    ${ticks.map(t => `<line class="grid-line" x1="${pl}" x2="${W - 8}" y1="${y(t)}" y2="${y(t)}"/><text x="${pl - 6}" y="${y(t) + 4}" text-anchor="end">${t > 0 ? '+' : ''}${t}</text>`).join('')}
+    <path d="${area}" fill="var(--chart-1)" opacity=".12"/><path d="${path}" fill="none" stroke="var(--chart-1)" stroke-width="2" stroke-linejoin="round"/>
+    <circle cx="${x(pts.length - 1)}" cy="${y(pts[pts.length - 1].cum)}" r="4" fill="var(--chart-1)" stroke="var(--ink-mid)" stroke-width="2"/>
+    <text x="${pl}" y="${H - 6}">${fmtDate(pts[0].d, { day: 'numeric', month: 'short' })}</text><text x="${W - 8}" y="${H - 6}" text-anchor="end">today</text>
+    <line id="ch-cross" x1="0" x2="0" y1="${pt}" y2="${H - pb}" stroke="var(--parch-dim)" stroke-dasharray="3 3" style="display:none"/></svg>
+    <div class="small dim">Net readers gained over the period (joins minus unsubscribes).</div>`;
+}
+ink.chartHover = (ev, svg) => { const pts = JSON.parse(svg.dataset.pts); const r = svg.getBoundingClientRect(); const W = 520, pl = 30; const rel = (ev.clientX - r.left) / r.width * W; const i = Math.max(0, Math.min(pts.length - 1, Math.round((rel - pl) / ((W - pl - 8) / (pts.length - 1))))); const p = pts[i]; const cx = pl + i * (W - pl - 8) / (pts.length - 1); const cr = svg.querySelector('#ch-cross'); if (cr) { cr.setAttribute('x1', cx); cr.setAttribute('x2', cx); cr.style.display = ''; } const tt = $('tooltip'); tt.innerHTML = `<b>${fmtDate(p.d, { weekday: 'short', day: 'numeric', month: 'short' })}</b><br>net ${p.v > 0 ? '+' : ''}${p.v} · joined ${p.s} · left ${p.u}`; tt.style.display = 'block'; tt.style.left = (ev.clientX + 12) + 'px'; tt.style.top = (ev.clientY - 10) + 'px'; };
+ink.chartLeave = () => { $('tooltip').style.display = 'none'; document.querySelectorAll('#ch-cross').forEach(c => c.style.display = 'none'); };
 
-  // ── DISCOUNT TOGGLE ───────────────────────────────────────────────────────
+/* ═══════════════════════════ APPROVALS ═══════════════════════════ */
+function renderApprovals() {
+  $('main').innerHTML = `${head('Approvals', 'Everything Ink has drafted, noticed, or suggested. Nothing here is sent until you say so.', `<button class="btn" onclick="ink.runInsights(this)">Ask Ink for insights</button>`)}
+  <div class="card"><div class="card-body">${S.suggestions.length ? S.suggestions.map(suggHtml).join('') : '<div class="empty">All clear. Ink will drop drafts and observations here as your plan comes due.</div>'}</div></div>`;
+}
 
-  function toggleDiscount() {
-    const on = document.getElementById('discount-toggle').checked;
-    document.getElementById('discount-fields').classList.toggle('visible', on);
-  }
+/* ═══════════════════════════ CAMPAIGNS ═══════════════════════════ */
+function renderCampaigns() {
+  const groups = [['Drafts', c => c.status === 'draft'], ['Scheduled & sending', c => ['scheduled', 'approved', 'sending'].includes(c.status)], ['Sent', c => c.status === 'sent']];
+  $('main').innerHTML = `${head('Letters', 'Every email to your readers, past and future.', `<a class="btn btn-primary" href="#compose">✍ New letter</a><a class="btn" href="#templates">From a template</a>`)}
+  ${groups.map(([name, f]) => { const rows = S.campaigns.filter(f); if (!rows.length && name !== 'Drafts') return ''; return `<div class="card"><div class="card-head"><h3>${name}</h3><div class="right dim small">${rows.length}</div></div><div class="card-body">${rows.length ? rows.map(campaignRow).join('') : '<div class="empty">No drafts. <a href="#compose">Write one</a> — Ink will help.</div>'}</div></div>`; }).join('')}`;
+}
+function campaignRow(c) {
+  const s = c.stats || {};
+  const meta = c.status === 'sent' ? `sent ${fmtDate(c.sentAt)} · ${s.sent || 0} sent · ${pct(s.uniqueOpens, s.sent)} opened · ${pct(s.uniqueClicks, s.sent)} clicked` : c.status === 'scheduled' ? `scheduled ${fmtDateTime(c.scheduledAt)}` : c.status === 'sending' ? `sending — ${s.sent || 0} so far` : `edited ${fmtDate(c.updatedAt)}${c.source === 'ink-auto' ? ' · drafted by Ink' : ''}${c.scheduledFor ? ' · due ' + c.scheduledFor : ''}`;
+  return `<div class="list-item"><div class="main"><div class="title">${esc(c.subject || c.title || 'Untitled')}</div><div class="sub">${meta}</div></div><span class="status ${c.status}">${c.status}</span><a class="btn btn-sm" href="#campaign/${c.id}">Open</a></div>`;
+}
 
-  // ── GENERATE ──────────────────────────────────────────────────────────────
+async function startCompose(templateId, planArg) {
+  const t = nowIso(); const id = rid(); const tpl = templateId ? T.byId(templateId) : null;
+  const c = { title: tpl ? tpl.name : 'New letter', templateId: templateId || null, subject: tpl ? tpl.subject : '', previewText: tpl ? tpl.previewText : '', body: tpl ? tpl.body : '', segment: { include: [], exclude: [], engagement: 'all' }, status: 'draft', source: 'manual', stats: { recipients: 0, sent: 0, delivered: 0, opened: 0, uniqueOpens: 0, clicked: 0, uniqueClicks: 0, bounced: 0, complained: 0, unsubscribed: 0 }, createdAt: t, updatedAt: t };
+  if (planArg) { const [planId, itemId] = planArg.split(':'); const plan = S.plans.find(p => p.id === planId); const it = plan && (plan.items || []).find(i => i.id === itemId); if (it) { c.planId = planId; c.planItemId = itemId; c.title = it.title; c.scheduledFor = it.dueDate; if (it.segment === 'quiet') c.segment.engagement = 'quiet'; if (it.segment && it.segment.startsWith('tag:')) c.segment.include = [it.segment.slice(4)]; await updatePlanItem(planId, itemId, { status: 'drafted', campaignId: id }); } }
+  await setDoc(aDoc('campaigns', id), c);
+  location.replace('#campaign/' + id);
+}
+let editorState = { id: null, dirty: false, saveTimer: null };
+function renderCampaign(id) {
+  const c = S.campaigns.find(x => x.id === id);
+  if (!c) { $('main').innerHTML = `${head('Letter')}<div class="empty">Loading…</div>`; return; }
+  if (editorState.id === id && document.getElementById('ed-body')) { updateCampaignStatusBar(c); return; } // keep typing state
+  editorState = { id, dirty: false, saveTimer: null };
+  if (!S.subs) loadSubs().then(() => { if (S.view === 'campaign' && editorState.id === id && !editorState.dirty) { editorState.id = null; renderCampaign(id); } });
+  const locked = ['sent', 'sending', 'scheduled'].includes(c.status);
+  const tags = allTags();
+  $('main').innerHTML = `
+  ${head(esc(c.title || 'Letter'), `<span class="status ${c.status}">${c.status}</span> <span id="ed-save" class="small dim"></span>`, `<a class="btn btn-ghost" href="#campaigns">← Letters</a>${c.status === 'draft' ? `<button class="btn btn-danger btn-sm" onclick="ink.deleteCampaign('${id}')">Delete</button>` : ''}`)}
+  <div id="ed-status">${campaignStatusBar(c)}</div>
+  <div class="editor">
+    <div>
+      ${locked ? '' : `<div class="ai-bar"><h3>✦ Ask Ink to write it</h3>
+        <textarea id="ed-brief" rows="3" placeholder="What do you want to say? Two sentences is plenty — e.g. 'Book 2 is drafted. The cove scene finally works. Mention the Kickstarter is coming in October.'">${esc(c.brief || '')}</textarea>
+        <div class="row" style="margin-top:.5rem"><div><label>Tone</label><select id="ed-tone"><option value="">In my usual voice</option><option>warm and story-rich</option><option>quietly exciting — something is building</option><option>reflective and personal</option><option>worldbuilding deep-dive</option><option>gentle urgency — now is a good moment</option><option>short and plain</option></select></div>
+        <div class="auto"><button class="btn btn-primary" id="ed-gen" onclick="ink.aiDraft('${id}',this)">${c.body && c.body.length > 200 ? 'Rewrite from my brief' : 'Write the draft'}</button></div></div>
+        <div class="small dim" style="margin-top:.4rem">Ink writes from your profile, your books, and the template. You edit; Ink never sends.</div></div>`}
+      <div class="card"><div class="card-body">
+        <label>Internal title</label><input type="text" id="ed-title" value="${esc(c.title || '')}" ${locked ? 'disabled' : ''}>
+        <label>Subject line ${locked ? '' : `<button class="btn btn-sm btn-ghost" style="float:right;margin-top:-4px" onclick="ink.aiSubjects('${id}',this)">✦ Suggest subjects</button>`}</label><input type="text" id="ed-subject" value="${esc(c.subject || '')}" ${locked ? 'disabled' : ''} style="font-family:var(--serif);font-size:1.15rem">
+        <div id="ed-alts">${(c.subjectAlternatives || []).length ? c.subjectAlternatives.map(s => `<button class="subj-alt" onclick="ink.useSubject(this)">${esc(s)}</button>`).join('') : ''}</div>
+        <label>Preview text <span class="hint">(the grey line after the subject in the inbox)</span></label><input type="text" id="ed-preview" value="${esc(c.previewText || '')}" ${locked ? 'disabled' : ''}>
+        <label>Body <span class="hint">— **bold**, *italic*, [link](url), [button: Label](url), ## heading, > quote, ---, {{first_name}}</span></label>
+        <textarea id="ed-body" class="body" ${locked ? 'disabled' : ''}>${esc(c.body || '')}</textarea>
+        ${c.aiNotes ? `<div class="msg msg-info visible">Ink: ${esc(c.aiNotes)}</div>` : ''}
+        ${locked ? '' : `<div class="row" style="margin-top:.75rem"><div><input type="text" id="ed-polish" placeholder="Ask Ink to tweak: 'shorter', 'warmer opening', 'add a line about the audiobook'…"></div><div class="auto"><button class="btn" onclick="ink.aiPolish('${id}',this)">✦ Tweak</button></div></div>`}
+      </div></div>
+      <div class="card"><div class="card-head"><span class="g">☺</span><h3>Who gets it</h3><div class="right small dim" id="ed-count">…</div></div><div class="card-body">
+        <div class="row"><div><label>Engagement</label><select id="ed-eng" ${locked ? 'disabled' : ''} onchange="ink.segmentChanged('${id}')"><option value="all" ${(c.segment?.engagement || 'all') === 'all' ? 'selected' : ''}>Everyone active</option><option value="engaged" ${c.segment?.engagement === 'engaged' ? 'selected' : ''}>Engaged (opened in 90 days)</option><option value="quiet" ${c.segment?.engagement === 'quiet' ? 'selected' : ''}>Quiet (no opens in 90 days)</option></select></div></div>
+        <label>Only readers tagged <span class="hint">(any of)</span></label><div id="ed-inc">${tags.length ? tags.map(t => `<span class="chip click ${(c.segment?.include || []).includes(t) ? 'on' : ''}" data-tag="${esc(t)}" onclick="ink.toggleChip(this,'${id}')">${esc(t)}</span>`).join('') : '<span class="dim small">No tags yet — add them in Readers.</span>'}</div>
+        <label>Exclude readers tagged</label><div id="ed-exc">${tags.map(t => `<span class="chip click ${(c.segment?.exclude || []).includes(t) ? 'on' : ''}" data-tag="${esc(t)}" onclick="ink.toggleChip(this,'${id}')">${esc(t)}</span>`).join('')}</div>
+      </div></div>
+    </div>
+    <div>
+      <div class="card"><div class="card-head"><span class="g">◉</span><h3>Preview</h3><div class="right"><button class="btn btn-sm" onclick="ink.sendTest('${id}',this)">Send me a test</button></div></div><div class="card-body" style="padding:.5rem"><iframe class="preview-frame" id="ed-frame" title="Email preview"></iframe></div></div>
+      ${locked ? '' : `<div class="card"><div class="card-head"><span class="g">✉</span><h3>Send</h3></div><div class="card-body">
+        <div class="row"><div><label>Schedule for</label><input type="date" id="ed-date" value="${esc(c.scheduledFor || '')}"></div><div><label>at</label><input type="time" id="ed-time" value="${String(S.author?.sendHour ?? 9).padStart(2, '0')}:00"></div><div class="auto"><button class="btn" onclick="ink.schedule('${id}',this)">Approve & schedule</button></div></div>
+        <div class="divider">or</div>
+        <button class="btn btn-send btn-block" onclick="ink.sendNow('${id}',this)">Approve & send now</button>
+        <div class="msg msg-error" id="ed-err"></div>
+        ${!S.author?.postalAddress ? `<div class="msg msg-error visible">Add your postal address in <a href="#settings">Settings</a> before sending — it is legally required in the footer.</div>` : ''}
+      </div></div>`}
+      ${c.status === 'sent' ? campaignStatsCard(c) : ''}
+    </div>
+  </div>`;
+  ['ed-title', 'ed-subject', 'ed-preview', 'ed-body', 'ed-brief'].forEach(i => { const el = $(i); if (el) el.addEventListener('input', () => { editorState.dirty = true; $('ed-save').textContent = 'unsaved'; clearTimeout(editorState.saveTimer); editorState.saveTimer = setTimeout(() => saveEditor(id), 900); if (i !== 'ed-brief' && i !== 'ed-title') updatePreview(); }); });
+  updatePreview(); segmentCount(c);
+}
+function campaignStatusBar(c) {
+  if (c.status === 'scheduled') return `<div class="msg msg-info visible" style="margin:0 0 1rem">Approved. Goes out ${fmtDateTime(c.scheduledAt)}. <button class="btn btn-sm btn-ghost" onclick="ink.unschedule('${c.id}')">Cancel schedule</button></div>`;
+  if (c.status === 'sending') return `<div class="msg msg-info visible" style="margin:0 0 1rem">Sending now — ${c.stats?.sent || 0} delivered to Resend so far. This page updates automatically.</div>`;
+  if (c.status === 'sent') return `<div class="msg msg-success visible" style="margin:0 0 1rem">Sent ${fmtDateTime(c.sentAt)} to ${c.stats?.sent || 0} readers.</div>`;
+  return '';
+}
+function updateCampaignStatusBar(c) { const el = $('ed-status'); if (el) el.innerHTML = campaignStatusBar(c); if (c.status === 'sent') { const card = document.querySelector('#ed-stats'); if (card) card.outerHTML = campaignStatsCard(c); } }
+function campaignStatsCard(c) {
+  const s = c.stats || {}; const n = s.sent || 0;
+  const bars = [['Delivered', s.delivered, 'var(--parch-dark)'], ['Opened', s.uniqueOpens, 'var(--chart-1)'], ['Clicked', s.uniqueClicks, 'var(--chart-2)'], ['Unsubscribed', s.unsubscribed, 'var(--ember)'], ['Bounced', s.bounced, 'var(--ember)']];
+  return `<div class="card" id="ed-stats"><div class="card-head"><span class="g">▤</span><h3>How it did</h3></div><div class="card-body">
+    ${bars.map(([l, v, col]) => `<div style="display:flex;align-items:center;gap:.6rem;margin:.35rem 0"><div style="width:100px" class="small muted">${l}</div><div style="flex:1;height:8px;background:var(--ink);border-radius:4px;overflow:hidden"><i style="display:block;height:100%;width:${n ? Math.min(100, 100 * (v || 0) / n) : 0}%;background:${col};border-radius:4px"></i></div><div class="num small" style="width:90px">${v || 0} · ${pct(v, n)}</div></div>`).join('')}
+    ${c.report?.insight ? `<div class="msg msg-info visible">Ink: ${esc(c.report.insight)}</div>` : `<div class="small dim" style="margin-top:.6rem">Opens and clicks arrive as readers open the email. Ink sends you a report after 48 hours.</div>`}
+  </div></div>`;
+}
+function editorValues() { return { title: $('ed-title')?.value.trim(), subject: $('ed-subject')?.value.trim(), previewText: $('ed-preview')?.value.trim(), body: $('ed-body')?.value, brief: $('ed-brief')?.value.trim() }; }
+async function saveEditor(id) {
+  if (!editorState.dirty) return; const v = editorValues(); if (v.title === undefined) return;
+  const patch = { updatedAt: nowIso() }; for (const k of ['title', 'subject', 'previewText', 'body', 'brief']) if (v[k] !== undefined) patch[k] = v[k];
+  editorState.dirty = false; await updateDoc(aDoc('campaigns', id), patch); $('ed-save').textContent = 'saved';
+}
+function updatePreview() {
+  const v = editorValues(); const a = S.author || {}; const f = $('ed-frame'); if (!f) return;
+  const r = R.renderEmail({ subject: v.subject, previewText: v.previewText, body: v.body, brand: a.brand, author: { penName: a.penName, address: a.postalAddress, webUrl: a.webUrl }, vars: { name: 'Reader', first_name: 'Reader', pen_name: a.penName, web_url: a.webUrl, buy_url: a.buyUrl || (a.books || [])[0]?.link || a.webUrl || '#', book_title: (a.books || [])[0]?.title || '', unsubscribe_url: '#' } });
+  f.srcdoc = r.html;
+}
+ink.useSubject = (btn) => { $('ed-subject').value = btn.textContent; $('ed-subject').dispatchEvent(new Event('input')); };
+ink.aiDraft = async (id, btn) => {
+  const c = S.campaigns.find(x => x.id === id); const v = editorValues();
+  busy(btn, true, 'Ink is writing'); hideMsg('ed-err');
+  try {
+    await saveEditor(id);
+    const r = await api('/ai/draft', { templateId: c.templateId, brief: v.brief, tone: $('ed-tone').value, existing: v.body && v.body.length > 200 && !c.templateId ? v.body : '', planTitle: c.planId ? c.title : '' });
+    const e = r.email; $('ed-subject').value = e.subject || ''; $('ed-preview').value = e.previewText || ''; $('ed-body').value = e.body || '';
+    $('ed-alts').innerHTML = (e.subjectAlternatives || []).map(s => `<button class="subj-alt" onclick="ink.useSubject(this)">${esc(s)}</button>`).join('');
+    await updateDoc(aDoc('campaigns', id), { subject: e.subject || '', previewText: e.previewText || '', body: e.body || '', subjectAlternatives: e.subjectAlternatives || [], aiNotes: e.notes || '', brief: v.brief, updatedAt: nowIso() });
+    editorState.dirty = false; updatePreview(); toast('Draft written — read it with a red pen.');
+  } catch (e) { toast(e.message, 5000); } finally { busy(btn, false); }
+};
+ink.aiSubjects = async (id, btn) => { busy(btn, true, ''); try { const v = editorValues(); const r = await api('/ai/subjects', { subject: v.subject, body: v.body }); $('ed-alts').innerHTML = r.subjects.map(s => `<button class="subj-alt" onclick="ink.useSubject(this)">${esc(s)}</button>`).join(''); } catch (e) { toast(e.message, 5000); } finally { busy(btn, false); } };
+ink.aiPolish = async (id, btn) => { const inst = $('ed-polish').value.trim(); busy(btn, true, ''); try { const v = editorValues(); const r = await api('/ai/polish', { body: v.body, instruction: inst }); $('ed-body').value = r.body; $('ed-body').dispatchEvent(new Event('input')); $('ed-polish').value = ''; toast(r.notes || 'Tweaked.'); } catch (e) { toast(e.message, 5000); } finally { busy(btn, false); } };
+ink.toggleChip = async (el, id) => { el.classList.toggle('on'); ink.segmentChanged(id); };
+ink.segmentChanged = async (id) => {
+  const seg = { engagement: $('ed-eng').value, include: [...document.querySelectorAll('#ed-inc .chip.on')].map(c => c.dataset.tag), exclude: [...document.querySelectorAll('#ed-exc .chip.on')].map(c => c.dataset.tag) };
+  await updateDoc(aDoc('campaigns', id), { segment: seg, updatedAt: nowIso() }); const c = S.campaigns.find(x => x.id === id); if (c) { c.segment = seg; segmentCount(c); }
+};
+function matchSeg(sub, seg) {
+  if (!seg) return true; const tags = sub.tags || [];
+  if (seg.include?.length && !seg.include.some(t => tags.includes(t))) return false;
+  if (seg.exclude?.length && seg.exclude.some(t => tags.includes(t))) return false;
+  if (seg.engagement && seg.engagement !== 'all') { const last = sub.lastOpenAt || sub.lastClickAt || sub.createdAt || ''; const quiet = !last || Date.now() - new Date(last).getTime() > 90 * 864e5; if (seg.engagement === 'quiet' && !quiet) return false; if (seg.engagement === 'engaged' && quiet) return false; }
+  return true;
+}
+async function segmentCount(c) { await loadSubs(); const n = S.subs.filter(s => s.status === 'active' && matchSeg(s, c.segment)).length; const el = $('ed-count'); if (el) el.textContent = `${n.toLocaleString()} readers`; return n; }
+ink.sendTest = async (id, btn) => { await saveEditor(id); busy(btn, true, 'Sending'); try { const r = await api(`/campaigns/${id}/test`, {}); toast(`Test sent to ${r.to}`); } catch (e) { toast(e.message, 5000); } finally { busy(btn, false); } };
+ink.sendNow = async (id, btn) => {
+  await saveEditor(id); hideMsg('ed-err'); const c = S.campaigns.find(x => x.id === id); const v = editorValues();
+  if (!v.subject || !v.body) return showMsg('ed-err', 'Subject and body are needed.');
+  if (/\[[^\]]{3,}\]/.test(v.body + v.subject) && !(await confirmModal('Placeholders remain', 'The text still contains [square-bracket placeholders]. Send anyway?', 'Send anyway', true))) return;
+  const n = await segmentCount(c);
+  if (!(await confirmModal('Send now?', `<b>"${esc(v.subject)}"</b> will go to <b>${n.toLocaleString()} readers</b> right now. This cannot be undone.`, `Yes, send to ${n}`))) return;
+  busy(btn, true, 'Sending'); try { await api(`/campaigns/${id}/send`, { confirm: 'SEND' }); toast('On its way.'); editorState.id = null; } catch (e) { showMsg('ed-err', e.message); } finally { busy(btn, false); }
+};
+ink.schedule = async (id, btn) => {
+  await saveEditor(id); hideMsg('ed-err'); const v = editorValues(); const d = $('ed-date').value, t = $('ed-time').value || '09:00';
+  if (!d) return showMsg('ed-err', 'Pick a date.'); if (!v.subject || !v.body) return showMsg('ed-err', 'Subject and body are needed.');
+  const at = new Date(`${d}T${t}:00`); if (isNaN(at)) return showMsg('ed-err', 'Invalid date.');
+  const n = await segmentCount(S.campaigns.find(x => x.id === id));
+  if (!(await confirmModal('Approve & schedule?', `<b>"${esc(v.subject)}"</b> goes to <b>${n.toLocaleString()} readers</b> on <b>${at.toLocaleString('en-IE', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}</b>. You can cancel any time before then.`, 'Approve'))) return;
+  busy(btn, true, ''); try { await api(`/campaigns/${id}/schedule`, { at: at.toISOString() }); const s = S.suggestions.find(x => x.campaignId === id); if (s) updateDoc(aDoc('suggestions', s.id), { status: 'approved', resolvedAt: nowIso() }); toast('Scheduled.'); editorState.id = null; } catch (e) { showMsg('ed-err', e.message); } finally { busy(btn, false); }
+};
+ink.unschedule = async (id) => { try { await api(`/campaigns/${id}/unschedule`, {}); editorState.id = null; toast('Back to draft.'); } catch (e) { toast(e.message, 5000); } };
+ink.deleteCampaign = async (id) => { if (!(await confirmModal('Delete this draft?', 'It cannot be recovered.', 'Delete', true))) return; const c = S.campaigns.find(x => x.id === id); if (c?.planId && c.planItemId) await updatePlanItem(c.planId, c.planItemId, { status: 'upcoming', campaignId: null }); await deleteDoc(aDoc('campaigns', id)); location.hash = '#campaigns'; };
 
-  async function generateEmail() {
-    const btn = document.getElementById('generate-btn');
-    const errEl = document.getElementById('generate-error');
-    const infoEl = document.getElementById('generate-info');
+/* ═══════════════════════════ PLAN ═══════════════════════════ */
+function planItemsUpcoming() { const out = []; S.plans.filter(p => p.status === 'active').forEach(plan => (plan.items || []).forEach(it => { if (!['sent', 'skipped'].includes(it.status)) out.push({ plan, it }); })); return out.sort((a, b) => a.it.dueDate.localeCompare(b.it.dueDate)); }
+function renderPlan(id) {
+  const active = S.plans.filter(p => p.status === 'active'); const done = S.plans.filter(p => p.status !== 'active');
+  if (id) { const p = S.plans.find(x => x.id === id); if (p) return renderPlanDetail(p); }
+  $('main').innerHTML = `${head('Plan', 'A schedule Ink keeps for you: it drafts each letter a few days early and asks for your approval.', `<button class="btn btn-primary" onclick="ink.newPlanModal()">＋ New plan</button>`)}
+  ${active.length ? active.map(p => planCard(p)).join('') : `<div class="card"><div class="card-body"><div class="empty">No active plan. The single best habit is one letter a month — start the <a href="#" onclick="ink.newPlanModal('nurture-monthly');return false">Steady nurture</a> plan, or tell Ink your goal and let it choose.</div></div></div>`}
+  ${done.length ? `<div class="divider">Finished & paused</div>${done.map(p => planCard(p)).join('')}` : ''}`;
+}
+function planCard(p) {
+  const items = p.items || []; const sent = items.filter(i => i.status === 'sent').length; const next = items.filter(i => !['sent', 'skipped'].includes(i.status))[0];
+  return `<div class="card"><div class="card-head"><span class="g">◷</span><h3>${esc(p.name)}</h3><div class="right"><span class="status ${p.status}">${p.status}</span><a class="btn btn-sm" href="#plan/${p.id}">Open</a></div></div><div class="card-body">
+    <div class="small muted">${sent}/${items.length} sent · anchored ${p.anchorDate}${next ? ` · next: <b style="color:var(--parch)">${esc(next.title)}</b> on ${fmtDate(next.dueDate + 'T12:00:00Z', { weekday: 'short', day: 'numeric', month: 'short' })}` : ''}</div>
+    <div class="health"><i style="width:${items.length ? 100 * sent / items.length : 0}%"></i></div>${p.rationale ? `<p class="small dim" style="margin-top:.6rem">${esc(p.rationale)}</p>` : ''}</div></div>`;
+}
+function renderPlanDetail(p) {
+  const today = dateStr(Date.now());
+  $('main').innerHTML = `${head(esc(p.name), `<span class="status ${p.status}">${p.status}</span> · anchored on ${p.anchorDate} · Ink drafts each letter ${p.leadDays || 3} days before it is due`, `<a class="btn btn-ghost" href="#plan">← Plans</a>${p.status === 'active' ? `<button class="btn" onclick="ink.setPlanStatus('${p.id}','paused')">Pause</button>` : `<button class="btn" onclick="ink.setPlanStatus('${p.id}','active')">Resume</button>`}<button class="btn btn-danger btn-sm" onclick="ink.deletePlan('${p.id}')">Delete</button>`)}
+  ${p.brief ? `<div class="msg msg-info visible" style="margin:0 0 1rem">Brief for Ink: ${esc(p.brief)}</div>` : ''}
+  <div class="card"><div class="card-body">
+    ${(p.items || []).map(it => { const past = it.dueDate < today; const due = !past && (new Date(it.dueDate) - Date.now()) / 864e5 <= (p.leadDays || 3); const c = it.campaignId && S.campaigns.find(x => x.id === it.campaignId); return `<div class="plan-item ${past && it.status !== 'sent' ? 'past' : ''} ${due ? 'due' : ''}">
+      <div class="date">${fmtDate(it.dueDate + 'T12:00:00Z', { day: 'numeric', month: 'short' })}<small>${fmtDate(it.dueDate + 'T12:00:00Z', { weekday: 'short' })}</small></div>
+      <div><div style="color:var(--parch)">${esc(it.title)} <span class="status ${it.status}">${it.status}</span></div><div class="small muted">${esc((T.byId(it.templateId) || {}).name || '')}${it.segment ? ' · ' + esc(it.segment) : ''}${c && c.status === 'sent' ? ` · ${pct(c.stats?.uniqueOpens, c.stats?.sent)} opened` : ''}</div>${it.brief ? `<div class="small dim">${esc(it.brief)}</div>` : ''}</div>
+      <div class="acts inline">${it.status === 'sent' ? `<a class="btn btn-sm" href="#campaign/${it.campaignId}">Report</a>` : it.campaignId ? `<a class="btn btn-sm btn-primary" href="#campaign/${it.campaignId}">Review</a>` : it.status === 'skipped' ? '' : `<button class="btn btn-sm btn-primary" onclick="ink.draftPlanItem('${p.id}','${it.id}',this)">✦ Draft now</button><a class="btn btn-sm" href="#compose/${it.templateId}/${p.id}:${it.id}">Write myself</a>`}
+      ${['sent', 'skipped'].includes(it.status) ? '' : `<button class="btn btn-sm btn-ghost" onclick="ink.editPlanItem('${p.id}','${it.id}')">Edit</button><button class="btn btn-sm btn-ghost" onclick="ink.skipPlanItem('${p.id}','${it.id}')">Skip</button>`}</div></div>`; }).join('')}
+  </div></div>`;
+}
+ink.newPlanModal = (pre) => {
+  modal(`<h2>New plan</h2>
+  <div class="ai-bar"><h3>✦ Let Ink choose</h3><textarea id="np-goal" rows="2" placeholder="e.g. 'Resonance launches on Kickstarter 14 October — build to a strong first 48 hours' or 'just keep my list warm'"></textarea><div class="row" style="margin-top:.5rem"><div><label>Key date <span class="hint">(optional)</span></label><input type="date" id="np-goal-date"></div><div class="auto"><button class="btn btn-primary" onclick="ink.aiPlan(this)">Suggest a plan</button></div></div></div>
+  <div class="divider">or pick a playbook</div>
+  <label>Playbook</label><select id="np-pb" onchange="ink.npPbChanged()">${T.PLAYBOOKS.map(pb => `<option value="${pb.id}" ${pre === pb.id ? 'selected' : ''}>${esc(pb.name)}</option>`).join('')}</select>
+  <div class="small muted" id="np-desc" style="margin-top:.4rem"></div>
+  <label id="np-anchor-label">Anchor date</label><input type="date" id="np-date" value="${dateStr(Date.now() + 3 * 864e5)}">
+  <label>Brief for Ink <span class="hint">(optional — what this campaign is about)</span></label><textarea id="np-brief" rows="2"></textarea>
+  <label>Plan name</label><input type="text" id="np-name" placeholder="Leave blank to use the playbook name">
+  <div class="msg msg-error" id="np-err"></div>
+  <div class="modal-actions"><button class="btn btn-ghost" onclick="ink.closeModal()">Cancel</button><button class="btn btn-primary" onclick="ink.createPlan(this)">Create plan</button></div>`);
+  ink.npPbChanged();
+};
+ink.npPbChanged = () => { const pb = T.playbookById($('np-pb').value); $('np-desc').textContent = pb.description + ` (${pb.items.length} letters)`; $('np-anchor-label').textContent = pb.anchorLabel || 'Anchor date'; };
+ink.aiPlan = async (btn) => { const goal = $('np-goal').value.trim(); if (!goal) return showMsg('np-err', 'Tell Ink the goal first.'); busy(btn, true, 'Thinking'); try { const r = await api('/ai/plan', { goal, anchorDate: $('np-goal-date').value }); if (T.playbookById(r.playbookId)) $('np-pb').value = r.playbookId; ink.npPbChanged(); if (r.anchorDate) $('np-date').value = r.anchorDate; $('np-brief').value = goal; $('np-desc').innerHTML = `<span style="color:var(--cav-glow)">Ink:</span> ${esc(r.rationale)}`; $('np-pb').dataset.briefs = JSON.stringify(r.briefs || {}); } catch (e) { showMsg('np-err', e.message); } finally { busy(btn, false); } };
+ink.createPlan = async (btn) => {
+  const pb = T.playbookById($('np-pb').value); const anchor = $('np-date').value; if (!anchor) return showMsg('np-err', 'Pick the anchor date.');
+  const briefs = JSON.parse($('np-pb').dataset.briefs || '{}'); const t = nowIso(); const id = rid();
+  const items = pb.items.map((it, i) => ({ id: rid(), title: it.title, templateId: it.templateId, offsetDays: it.offsetDays, dueDate: addDaysStr(anchor, it.offsetDays), status: 'upcoming', segment: it.segment || null, brief: briefs[String(i)] || '', campaignId: null }));
+  await setDoc(aDoc('plans', id), { name: $('np-name').value.trim() || pb.name, playbookId: pb.id, anchorDate: anchor, leadDays: pb.leadDays || 3, brief: $('np-brief').value.trim(), rationale: $('np-desc').textContent.startsWith('Ink:') ? $('np-desc').textContent.slice(4).trim() : '', status: 'active', items, createdAt: t, updatedAt: t });
+  closeModal(); location.hash = '#plan/' + id; toast('Plan created. Ink will draft each letter as it comes due.');
+};
+async function updatePlanItem(planId, itemId, patch) { const p = S.plans.find(x => x.id === planId); if (!p) return; const items = (p.items || []).map(it => it.id === itemId ? { ...it, ...patch } : it); await updateDoc(aDoc('plans', planId), { items, updatedAt: nowIso() }); }
+ink.skipPlanItem = (planId, itemId) => updatePlanItem(planId, itemId, { status: 'skipped' });
+ink.setPlanStatus = (id, status) => updateDoc(aDoc('plans', id), { status, updatedAt: nowIso() });
+ink.deletePlan = async (id) => { if (await confirmModal('Delete this plan?', 'Drafted letters are kept; the schedule is removed.', 'Delete', true)) { await deleteDoc(aDoc('plans', id)); location.hash = '#plan'; } };
+ink.editPlanItem = (planId, itemId) => { const p = S.plans.find(x => x.id === planId); const it = p.items.find(i => i.id === itemId); modal(`<h2>Edit: ${esc(it.title)}</h2><label>Title</label><input type="text" id="pi-title" value="${esc(it.title)}"><label>Due date</label><input type="date" id="pi-date" value="${it.dueDate}"><label>Template</label><select id="pi-tpl">${T.TEMPLATES.map(t => `<option value="${t.id}" ${t.id === it.templateId ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}</select><label>Brief for Ink</label><textarea id="pi-brief" rows="3">${esc(it.brief || '')}</textarea><div class="modal-actions"><button class="btn btn-ghost" onclick="ink.closeModal()">Cancel</button><button class="btn btn-primary" onclick="ink.savePlanItem('${planId}','${itemId}')">Save</button></div>`); };
+ink.savePlanItem = async (planId, itemId) => { await updatePlanItem(planId, itemId, { title: $('pi-title').value.trim(), dueDate: $('pi-date').value, templateId: $('pi-tpl').value, brief: $('pi-brief').value.trim() }); closeModal(); };
+ink.draftPlanItem = async (planId, itemId, btn) => {
+  const p = S.plans.find(x => x.id === planId); const it = p.items.find(i => i.id === itemId); busy(btn, true, 'Ink is writing');
+  try {
+    const r = await api('/ai/draft', { templateId: it.templateId, brief: it.brief || p.brief || '', planTitle: `${p.name}: ${it.title}` }); const e = r.email; const t = nowIso(); const id = rid();
+    const seg = it.segment === 'quiet' ? { engagement: 'quiet', include: [], exclude: [] } : it.segment?.startsWith('tag:') ? { include: [it.segment.slice(4)], exclude: [], engagement: 'all' } : { include: [], exclude: [], engagement: 'all' };
+    await setDoc(aDoc('campaigns', id), { title: it.title, templateId: it.templateId, planId, planItemId: itemId, subject: e.subject, previewText: e.previewText, body: e.body, subjectAlternatives: e.subjectAlternatives || [], aiNotes: e.notes || '', brief: it.brief || '', segment: seg, status: 'draft', source: 'ink-auto', scheduledFor: it.dueDate, stats: { recipients: 0, sent: 0, delivered: 0, opened: 0, uniqueOpens: 0, clicked: 0, uniqueClicks: 0, bounced: 0, complained: 0, unsubscribed: 0 }, createdAt: t, updatedAt: t });
+    await updatePlanItem(planId, itemId, { status: 'drafted', campaignId: id }); location.hash = '#campaign/' + id;
+  } catch (e) { toast(e.message, 5000); busy(btn, false); }
+};
 
-    errEl.classList.remove('visible');
-    infoEl.classList.remove('visible');
-
-    const update = document.getElementById('update-text').value.trim();
-    const tone = document.getElementById('tone-select').value;
-    const includeDiscount = document.getElementById('discount-toggle').checked;
-    const discountCode = document.getElementById('discount-code').value.trim();
-    const discountNote = document.getElementById('discount-note').value.trim();
-
-    if (includeDiscount && (!discountCode || !discountNote)) {
-      errEl.textContent = 'Please fill in the discount code and description.';
-      errEl.classList.add('visible');
-      return;
+/* ═══════════════════════════ READERS ═══════════════════════════ */
+async function loadSubs(force) { if (S.subs && !force) return S.subs; const snap = await getDocs(query(aCol('subscribers'), limit(20000))); S.subs = snap.docs.map(d => ({ id: d.id, ...d.data() })); return S.subs; }
+function allTags() { const t = new Set(); (S.subs || []).forEach(s => (s.tags || []).forEach(x => t.add(x))); return [...t].sort(); }
+let readersFilter = { q: '', status: 'active', tag: '' };
+async function renderReaders() {
+  $('main').innerHTML = `${head('Readers', 'Your list, owned by you. Export it any time.', `<button class="btn btn-primary" onclick="ink.addReaderModal()">＋ Add</button><button class="btn" onclick="ink.importModal()">Import CSV</button><button class="btn" onclick="ink.exportCsv()">Export</button>`)}<div class="empty">Loading readers…</div>`;
+  await loadSubs(); if (S.view !== 'readers') return;
+  const a = S.author || {}; const joinUrl = a.slug ? `${WORKER}/join/${a.slug}` : '';
+  const counts = { active: 0, pending: 0, unsubscribed: 0, bounced: 0, complained: 0 }; S.subs.forEach(s => counts[s.status] = (counts[s.status] || 0) + 1);
+  $('main').innerHTML = `${head('Readers', 'Your list, owned by you. Export it any time.', `<button class="btn btn-primary" onclick="ink.addReaderModal()">＋ Add</button><button class="btn" onclick="ink.importModal()">Import CSV</button><button class="btn" onclick="ink.exportCsv()">Export</button>`)}
+  <div class="tiles"><div class="tile"><div class="l">Active</div><div class="v cav">${counts.active.toLocaleString()}</div></div><div class="tile"><div class="l">Awaiting confirmation</div><div class="v">${counts.pending}</div></div><div class="tile"><div class="l">Unsubscribed</div><div class="v">${counts.unsubscribed}</div></div><div class="tile"><div class="l">Bounced / complained</div><div class="v">${counts.bounced + counts.complained}</div></div></div>
+  <div class="card"><div class="card-head"><span class="g">❧</span><h3>Grow the list</h3></div><div class="card-body">
+    ${joinUrl ? `<div class="row"><div><label>Your sign-up page</label><div class="inline"><input type="text" readonly value="${esc(joinUrl)}" onclick="this.select()"><a class="btn btn-sm auto" href="${esc(joinUrl)}" target="_blank" rel="noopener">Open</a></div></div></div>
+    <label>Embed a form on your site <span class="hint">(paste where the form should appear)</span></label><pre class="code" onclick="ink.selectAll(this)">&lt;div data-ink-join="${esc(a.slug)}" data-ink-tags="website" data-ink-button="Join the list"&gt;&lt;/div&gt;\n&lt;script src="${esc(WORKER)}/embed.js" async&gt;&lt;/script&gt;</pre>
+    <div class="small dim">Add <code>?tags=kickstarter</code> to the sign-up link to tag readers by where they came from.</div>` : `<div class="empty">Set your sign-up address in <a href="#settings">Settings</a> to get a hosted join page and an embeddable form.</div>`}
+  </div></div>
+  <div class="card"><div class="card-head"><h3>List</h3><div class="right"><input type="text" id="rd-q" placeholder="Search name or email" value="${esc(readersFilter.q)}" style="width:200px;padding:.35rem .6rem" oninput="ink.readersFilter()"><select id="rd-status" style="width:auto;padding:.35rem 2rem .35rem .6rem" onchange="ink.readersFilter()">${['active', 'pending', 'unsubscribed', 'bounced', 'complained', 'all'].map(s => `<option value="${s}" ${readersFilter.status === s ? 'selected' : ''}>${s}</option>`).join('')}</select><select id="rd-tag" style="width:auto;padding:.35rem 2rem .35rem .6rem" onchange="ink.readersFilter()"><option value="">any tag</option>${allTags().map(t => `<option ${readersFilter.tag === t ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select></div></div>
+  <div class="card-body tbl-wrap" id="rd-table"></div></div>`;
+  ink.readersFilter();
+}
+ink.selectAll = (el) => { const r = document.createRange(); r.selectNodeContents(el); const s = getSelection(); s.removeAllRanges(); s.addRange(r); };
+ink.readersFilter = () => {
+  readersFilter = { q: ($('rd-q')?.value || '').toLowerCase(), status: $('rd-status')?.value || 'active', tag: $('rd-tag')?.value || '' };
+  let rows = S.subs.filter(s => (readersFilter.status === 'all' || s.status === readersFilter.status) && (!readersFilter.tag || (s.tags || []).includes(readersFilter.tag)) && (!readersFilter.q || (s.email + ' ' + (s.name || '')).toLowerCase().includes(readersFilter.q)));
+  rows.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+  const shown = rows.slice(0, 300);
+  $('rd-table').innerHTML = rows.length ? `<table><thead><tr><th>Reader</th><th>Tags</th><th>Joined</th><th>Source</th><th class="num">Opens</th><th>Status</th></tr></thead><tbody>${shown.map(s => `<tr class="click" onclick="ink.readerModal('${s.id}')"><td><div style="color:var(--parch)">${esc(s.name || '')}</div><div class="small muted">${esc(s.email)}</div></td><td>${(s.tags || []).map(t => `<span class="chip">${esc(t)}</span>`).join('')}</td><td class="small">${fmtDate(s.createdAt)}</td><td class="small muted">${esc(s.source || '')}</td><td class="num">${s.opens || 0}</td><td><span class="status ${s.status}">${s.status}</span></td></tr>`).join('')}</tbody></table>${rows.length > 300 ? `<div class="small dim" style="padding:.5rem">Showing 300 of ${rows.length}. Narrow the search or export.</div>` : ''}` : '<div class="empty">No readers match.</div>';
+};
+ink.readerModal = (id) => {
+  const s = S.subs.find(x => x.id === id); if (!s) return;
+  modal(`<h2>${esc(s.name || s.email)}</h2><div class="small muted">${esc(s.email)} · <span class="status ${s.status}">${s.status}</span> · joined ${fmtDate(s.createdAt)} via ${esc(s.source || '?')}</div>
+  <div class="tiles" style="margin-top:1rem"><div class="tile"><div class="l">Opens</div><div class="v">${s.opens || 0}</div></div><div class="tile"><div class="l">Clicks</div><div class="v">${s.clicks || 0}</div></div><div class="tile"><div class="l">Last open</div><div class="v" style="font-size:1rem;padding-top:.5rem">${fmtDate(s.lastOpenAt)}</div></div></div>
+  <label>Name</label><input type="text" id="rm-name" value="${esc(s.name || '')}"><label>Tags <span class="hint">(comma separated)</span></label><input type="text" id="rm-tags" value="${esc((s.tags || []).join(', '))}"><label>Notes</label><textarea id="rm-notes" rows="2">${esc(s.notes || '')}</textarea>
+  ${s.bounceReason ? `<div class="msg msg-error visible">Bounce: ${esc(s.bounceReason)}</div>` : ''}
+  <div class="modal-actions">${s.status === 'active' ? `<button class="btn btn-danger" onclick="ink.setReaderStatus('${id}','unsubscribed')">Unsubscribe</button>` : (s.status === 'unsubscribed' || s.status === 'pending') ? `<button class="btn" onclick="ink.setReaderStatus('${id}','active')">Re-activate</button>` : ''}<button class="btn btn-danger btn-sm" onclick="ink.deleteReader('${id}')">Delete</button><button class="btn btn-ghost" onclick="ink.closeModal()">Cancel</button><button class="btn btn-primary" onclick="ink.saveReader('${id}')">Save</button></div>`);
+};
+ink.saveReader = async (id) => { const tags = $('rm-tags').value.split(',').map(t => t.trim()).filter(Boolean); await updateDoc(aDoc('subscribers', id), { name: $('rm-name').value.trim(), tags, notes: $('rm-notes').value.trim(), updatedAt: nowIso() }); closeModal(); await loadSubs(true); renderReaders(); };
+ink.setReaderStatus = async (id, status) => { const s = S.subs.find(x => x.id === id); const patch = { status, updatedAt: nowIso() }; if (status === 'unsubscribed') patch.unsubscribedAt = nowIso(); if (status === 'active') { patch.confirmedAt = nowIso(); patch.unsubscribedAt = null; } await updateDoc(aDoc('subscribers', id), patch); closeModal(); await api('/me/recount', {}); await loadSubs(true); renderReaders(); };
+ink.deleteReader = async (id) => { if (!(await confirmModal('Delete this reader?', 'Removes them and their history entirely (use Unsubscribe to keep a record).', 'Delete', true))) return; await deleteDoc(aDoc('subscribers', id)); closeModal(); await api('/me/recount', {}); await loadSubs(true); renderReaders(); };
+ink.addReaderModal = () => modal(`<h2>Add a reader</h2><label>Email</label><input type="email" id="ar-email"><label>Name</label><input type="text" id="ar-name"><label>Tags</label><input type="text" id="ar-tags" placeholder="e.g. kickstarter, arc"><div class="toggle-row" style="margin-top:.75rem"><div class="small">Send the welcome series to them</div><label class="toggle"><input type="checkbox" id="ar-welcome" checked><span class="s"></span></label></div><div class="msg msg-error" id="ar-err"></div><div class="modal-actions"><button class="btn btn-ghost" onclick="ink.closeModal()">Cancel</button><button class="btn btn-primary" onclick="ink.addReader(this)">Add</button></div>`);
+ink.addReader = async (btn) => {
+  const email = $('ar-email').value.trim(); if (!email) return showMsg('ar-err', 'Email is needed.'); busy(btn, true, '');
+  try {
+    const tags = $('ar-tags').value.split(',').map(t => t.trim()).filter(Boolean);
+    if ($('ar-welcome').checked) await api('/subscribers/add', { email, name: $('ar-name').value.trim(), tags, source: 'manual' });
+    else { const id = await subscriberId(email); const t = nowIso(); await setDoc(aDoc('subscribers', id), { email: email.toLowerCase(), name: $('ar-name').value.trim(), tags, status: 'active', source: 'manual', createdAt: t, confirmedAt: t, updatedAt: t, opens: 0, clicks: 0 }, { merge: true }); await api('/me/recount', {}); }
+    closeModal(); toast('Added.'); await loadSubs(true); renderReaders();
+  } catch (e) { showMsg('ar-err', e.message); busy(btn, false); }
+};
+ink.importModal = () => modal(`<h2>Import readers</h2><p class="small muted">Paste from a spreadsheet or upload a CSV export (MailerLite, Mailchimp, Substack…). Ink looks for email and name columns; existing readers keep their status and gain the tags.</p>
+  <input type="file" id="im-file" accept=".csv,.txt" onchange="ink.importFile(this)" style="margin-bottom:.5rem"><textarea id="im-text" rows="8" placeholder="email,name&#10;reader@example.com,Ada Lovelace"></textarea>
+  <label>Tag everyone imported with</label><input type="text" id="im-tags" placeholder="e.g. mailerlite-2026"><div class="toggle-row" style="margin-top:.75rem"><div class="small">These readers already agreed to hear from me (import as active)</div><label class="toggle"><input type="checkbox" id="im-active" checked><span class="s"></span></label></div>
+  <div class="msg msg-error" id="im-err"></div><div class="msg msg-success" id="im-ok"></div><div class="modal-actions"><button class="btn btn-ghost" onclick="ink.closeModal()">Close</button><button class="btn btn-primary" id="im-go" onclick="ink.importRun(this)">Import</button></div>`);
+ink.importFile = (inp) => { const f = inp.files[0]; if (!f) return; const r = new FileReader(); r.onload = () => $('im-text').value = r.result; r.readAsText(f); };
+function parseCsv(text) {
+  const rows = []; let row = [], cell = '', q = false;
+  for (let i = 0; i < text.length; i++) { const ch = text[i]; if (q) { if (ch === '"') { if (text[i + 1] === '"') { cell += '"'; i++; } else q = false; } else cell += ch; } else if (ch === '"') q = true; else if (ch === ',' || ch === '\t' || ch === ';') { row.push(cell); cell = ''; } else if (ch === '\n' || ch === '\r') { if (ch === '\r' && text[i + 1] === '\n') i++; row.push(cell); rows.push(row); row = []; cell = ''; } else cell += ch; }
+  if (cell || row.length) { row.push(cell); rows.push(row); }
+  return rows.filter(r => r.some(c => c.trim()));
+}
+ink.importRun = async (btn) => {
+  hideMsg('im-err'); hideMsg('im-ok'); const rows = parseCsv($('im-text').value); if (!rows.length) return showMsg('im-err', 'Nothing to import.');
+  const head = rows[0].map(h => h.trim().toLowerCase()); let ei = head.findIndex(h => h.includes('email')); let ni = head.findIndex(h => h === 'name' || h.includes('first') || h === 'full name'); let li = head.findIndex(h => h.includes('last'));
+  let data = rows; if (ei < 0) { ei = rows[0].findIndex(c => c.includes('@')); ni = ei === 0 ? 1 : 0; li = -1; } else data = rows.slice(1);
+  const tags = $('im-tags').value.split(',').map(t => t.trim()).filter(Boolean); const status = $('im-active').checked ? 'active' : 'pending';
+  busy(btn, true, 'Importing');
+  try {
+    await loadSubs(true); const existing = new Set(S.subs.map(s => s.id)); const t = nowIso(); let created = 0, merged = 0, skipped = 0; let batch = writeBatch(db), n = 0; const seen = new Set();
+    for (const r of data) {
+      const email = (r[ei] || '').trim().toLowerCase(); if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email) || seen.has(email)) { skipped++; continue; } seen.add(email);
+      const name = [(ni >= 0 ? r[ni] : ''), (li >= 0 ? r[li] : '')].map(x => (x || '').trim()).filter(Boolean).join(' ');
+      const id = await subscriberId(email);
+      if (existing.has(id)) { if (tags.length) { batch.update(aDoc('subscribers', id), { tags: arrayUnion(...tags), updatedAt: t }); n++; } merged++; }
+      else { batch.set(aDoc('subscribers', id), { email, name, tags, status, source: 'import', createdAt: t, confirmedAt: status === 'active' ? t : null, importedAt: t, updatedAt: t, opens: 0, clicks: 0 }); n++; created++; }
+      if (n >= 450) { await batch.commit(); batch = writeBatch(db); n = 0; }
     }
+    if (n) await batch.commit();
+    await api('/me/recount', {}); if (created) { try { await setDoc(aDoc('metricsDaily', t.slice(0, 10)), { subscribed: (S.metrics.find(m => m.id === t.slice(0, 10))?.subscribed || 0) + created }, { merge: true }); } catch { } }
+    showMsg('im-ok', `Imported ${created} new readers, ${merged} already on the list, ${skipped} skipped.`, 'success'); busy(btn, false); S.metrics = []; await loadSubs(true); renderReaders();
+  } catch (e) { showMsg('im-err', e.message); busy(btn, false); }
+};
+ink.exportCsv = async () => { await loadSubs(); const lines = [['email', 'name', 'status', 'tags', 'joined', 'source', 'opens', 'clicks']].concat(S.subs.map(s => [s.email, s.name || '', s.status, (s.tags || []).join('|'), s.createdAt || '', s.source || '', s.opens || 0, s.clicks || 0])).map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n'); const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([lines], { type: 'text/csv' })); a.download = `ink-readers-${dateStr(Date.now())}.csv`; a.click(); };
 
-    btn.disabled = true;
-    btn.innerHTML = 'Writing <span class="loading-dots"><span></span><span></span><span></span></span>';
-    infoEl.textContent = 'Gemini is composing your letter — this takes about 10 seconds…';
-    infoEl.classList.add('visible');
+/* ═══════════════════════════ TEMPLATES ═══════════════════════════ */
+function renderTemplates() {
+  const cats = [...new Set(T.TEMPLATES.map(t => t.category))];
+  $('main').innerHTML = `${head('Templates', 'Nearly-finished letters. Pick one, fill the [brackets] — or let Ink fill them from a two-line brief.')}
+  ${cats.map(c => `<div class="divider">${c}</div><div class="grid grid-3" style="margin-bottom:1rem">${T.TEMPLATES.filter(t => t.category === c).map(t => `<div class="tpl-card" onclick="location.hash='#compose/${t.id}'"><div class="cat">${esc(t.category)}</div><div class="n">${esc(t.name)}</div><div class="p">${esc(t.purpose)}</div><div class="small dim">“${esc(t.subject)}”</div></div>`).join('')}</div>`).join('')}`;
+}
 
-    try {
-      const res = await fetch(`${WORKER}/generate`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Admin-Secret': adminSecret,
-        },
-        body: JSON.stringify({ update, tone, includeDiscount, discountCode, discountNote }),
-      });
+/* ═══════════════════════════ AUTOMATIONS ═══════════════════════════ */
+function renderAutomations() {
+  const w = S.welcome || { enabled: false, steps: T.WELCOME_SEQUENCE.steps.map(s => { const tp = T.byId(s.templateId); return { delayDays: s.delayDays, subject: tp.subject, previewText: tp.previewText, body: tp.body }; }) };
+  $('main').innerHTML = `${head('Welcome series', 'Sent automatically to every new reader. The first email is the most-opened one you will ever send — make it count.', `<div class="inline"><span class="small muted">${w.enabled ? 'On' : 'Off'}</span><label class="toggle"><input type="checkbox" ${w.enabled ? 'checked' : ''} onchange="ink.toggleWelcome(this.checked)"><span class="s"></span></label></div>`)}
+  ${(w.steps || []).map((s, i) => `<div class="card"><div class="card-head"><span class="g">${i + 1}</span><h3>Email ${i + 1}</h3><div class="right"><span class="small dim">sent ${(w.sentCounts || {})['s' + i] || 0}×</span><button class="btn btn-sm" onclick="ink.testWelcome(${i},this)">Send me a test</button><button class="btn btn-sm btn-ghost" onclick="ink.removeWelcomeStep(${i})">Remove</button></div></div><div class="card-body">
+    <div class="row"><div class="auto" style="width:130px"><label>Days after joining</label><input type="number" min="0" id="w-delay-${i}" value="${s.delayDays}"></div><div><label>Subject</label><input type="text" id="w-subj-${i}" value="${esc(s.subject)}"></div></div>
+    <label>Preview text</label><input type="text" id="w-prev-${i}" value="${esc(s.previewText || '')}">
+    <label>Body</label><textarea id="w-body-${i}" style="min-height:220px">${esc(s.body)}</textarea>
+  </div></div>`).join('')}
+  <div class="actions"><button class="btn" onclick="ink.addWelcomeStep()">＋ Add an email</button><button class="btn btn-primary" onclick="ink.saveWelcome(this)">Save series</button></div>
+  <p class="small dim" style="margin-top:1rem">Readers who unsubscribe mid-series stop receiving it immediately. Merge fields work here too.</p>`;
+}
+function readWelcomeForm() { const steps = []; for (let i = 0; ; i++) { const el = $(`w-subj-${i}`); if (!el) break; steps.push({ delayDays: Number($(`w-delay-${i}`).value) || 0, subject: el.value.trim(), previewText: $(`w-prev-${i}`).value.trim(), body: $(`w-body-${i}`).value }); } return steps; }
+ink.saveWelcome = async (btn) => { busy(btn, true, ''); const steps = readWelcomeForm(); await setDoc(aDoc('automations', 'welcome'), { name: 'Welcome series', trigger: 'subscribe', enabled: S.welcome?.enabled ?? true, steps, updatedAt: nowIso() }, { merge: true }); busy(btn, false); toast('Saved.'); };
+ink.toggleWelcome = async (on) => { const steps = readWelcomeForm(); await setDoc(aDoc('automations', 'welcome'), { name: 'Welcome series', trigger: 'subscribe', enabled: on, steps, updatedAt: nowIso() }, { merge: true }); };
+ink.addWelcomeStep = async () => { const steps = readWelcomeForm(); steps.push({ delayDays: (steps[steps.length - 1]?.delayDays || 0) + 4, subject: 'A note from {{pen_name}}', previewText: '', body: 'Hello {{first_name}},\n\n[Your message.]\n\n{{pen_name}}' }); await setDoc(aDoc('automations', 'welcome'), { steps, updatedAt: nowIso() }, { merge: true }); };
+ink.removeWelcomeStep = async (i) => { const steps = readWelcomeForm(); steps.splice(i, 1); await setDoc(aDoc('automations', 'welcome'), { steps, updatedAt: nowIso() }, { merge: true }); };
+ink.testWelcome = async (i, btn) => { busy(btn, true, ''); try { await ink.saveWelcome(null); await api('/automations/welcome/test', { step: i }); toast('Test sent to ' + S.user.email); } catch (e) { toast(e.message, 5000); } finally { busy(btn, false); } };
 
-      const data = await res.json();
-      infoEl.classList.remove('visible');
+/* ═══════════════════════════ ANALYTICS ═══════════════════════════ */
+async function renderAnalytics() {
+  await loadMetrics();
+  const sent = S.campaigns.filter(c => c.status === 'sent').sort((a, b) => (a.sentAt || '').localeCompare(b.sentAt || ''));
+  const tot = sent.reduce((a, c) => { const s = c.stats || {}; a.sent += s.sent || 0; a.opens += s.uniqueOpens || 0; a.clicks += s.uniqueClicks || 0; a.unsub += s.unsubscribed || 0; return a; }, { sent: 0, opens: 0, clicks: 0, unsub: 0 });
+  $('main').innerHTML = `${head('Analytics', 'What the numbers say — and what Ink would do about it.', `<button class="btn btn-primary" onclick="ink.runInsights(this)">✦ Ask Ink for insights</button>`)}
+  <div class="tiles"><div class="tile"><div class="l">Letters sent</div><div class="v">${sent.length}</div></div><div class="tile"><div class="l">Avg open rate</div><div class="v brass">${pct(tot.opens, tot.sent)}</div><div class="d">benchmark 35–45%</div></div><div class="tile"><div class="l">Avg click rate</div><div class="v cav">${pct(tot.clicks, tot.sent)}</div><div class="d">benchmark 2–5%</div></div><div class="tile"><div class="l">Unsubscribe rate</div><div class="v">${pct(tot.unsub, tot.sent)}</div><div class="d">healthy under 0.5%</div></div></div>
+  ${S.author?.lastInsights ? `<div class="msg msg-info visible" style="margin:0 0 1.25rem">Ink (${fmtDate(S.author.lastInsights.at)}): ${esc(S.author.lastInsights.summary)} <a href="#approvals">See suggestions →</a></div>` : ''}
+  <div class="grid grid-2"><div class="card"><div class="card-head"><h3>Reader growth · 90 days</h3></div><div class="card-body">${growthChart(90)}</div></div>
+  <div class="card"><div class="card-head"><h3>Open & click rate by letter</h3></div><div class="card-body">${ratesChart(sent.slice(-12))}</div></div></div>
+  <div class="card"><div class="card-head"><h3>All letters</h3></div><div class="card-body tbl-wrap">${sent.length ? `<table><thead><tr><th>Sent</th><th>Subject</th><th class="num">Sent</th><th class="num">Delivered</th><th class="num">Opens</th><th class="num">Clicks</th><th class="num">Unsub</th><th class="num">Bounce</th></tr></thead><tbody>${sent.slice().reverse().map(c => { const s = c.stats || {}; return `<tr class="click" onclick="location.hash='#campaign/${c.id}'"><td class="small">${fmtDate(c.sentAt)}</td><td>${esc(c.subject)}</td><td class="num">${s.sent || 0}</td><td class="num">${pct(s.delivered, s.sent)}</td><td class="num">${pct(s.uniqueOpens, s.sent)}</td><td class="num">${pct(s.uniqueClicks, s.sent)}</td><td class="num">${s.unsubscribed || 0}</td><td class="num">${s.bounced || 0}</td></tr>`; }).join('')}</tbody></table>` : '<div class="empty">Nothing sent yet.</div>'}</div></div>`;
+}
+function ratesChart(rows) {
+  if (!rows.length) return '<div class="empty small">Rates appear after your first letter.</div>';
+  const W = 520, rowH = 40, pl = 150, H = rows.length * rowH + 30;
+  const max = Math.max(50, ...rows.map(c => 100 * (c.stats?.uniqueOpens || 0) / Math.max(1, c.stats?.sent || 1)));
+  const x = (v) => pl + (W - pl - 40) * v / max;
+  return `<div class="legend"><span><i style="background:var(--chart-1)"></i>Opened</span><span><i style="background:var(--chart-2)"></i>Clicked</span></div>
+  <svg class="chart" viewBox="0 0 ${W} ${H}">${[0, 25, 50].filter(v => v <= max).map(v => `<line class="grid-line" x1="${x(v)}" x2="${x(v)}" y1="0" y2="${H - 24}"/><text x="${x(v)}" y="${H - 8}" text-anchor="middle">${v}%</text>`).join('')}
+  ${rows.map((c, i) => { const s = c.stats || {}; const n = Math.max(1, s.sent || 1); const o = 100 * (s.uniqueOpens || 0) / n, k = 100 * (s.uniqueClicks || 0) / n; const y = i * rowH + 6; return `<text x="${pl - 8}" y="${y + 16}" text-anchor="end" style="font-size:12px">${esc((c.subject || '').slice(0, 22))}${(c.subject || '').length > 22 ? '…' : ''}</text><rect x="${pl}" y="${y}" width="${Math.max(0, x(o) - pl)}" height="11" rx="3" fill="var(--chart-1)"><title>${esc(c.subject)} — opened ${o.toFixed(1)}%</title></rect><rect x="${pl}" y="${y + 14}" width="${Math.max(0, x(k) - pl)}" height="11" rx="3" fill="var(--chart-2)"><title>${esc(c.subject)} — clicked ${k.toFixed(1)}%</title></rect><text x="${x(o) + 5}" y="${y + 10}" style="font-size:12px">${Math.round(o)}%</text><text x="${x(k) + 5}" y="${y + 24}" style="font-size:12px">${Math.round(k)}%</text>`; }).join('')}</svg>`;
+}
 
-      if (!data.ok) {
-        errEl.textContent = data.error || 'Generation failed. Try again.';
-        errEl.classList.add('visible');
-        return;
-      }
-
-      currentEmail = data.email;
-      populatePreview(data.email);
-      document.getElementById('preview-panel').classList.add('visible');
-      document.getElementById('preview-panel').scrollIntoView({ behavior: 'smooth', block: 'start' });
-
-    } catch (e) {
-      infoEl.classList.remove('visible');
-      errEl.textContent = 'Network error. Check your connection and try again.';
-      errEl.classList.add('visible');
-    } finally {
-      btn.disabled = false;
-      btn.textContent = 'Generate Letter';
-    }
-  }
-
-  function populatePreview(email) {
-    document.getElementById('edit-subject').value = email.subject || '';
-    document.getElementById('edit-preview-text').value = email.previewText || '';
-    document.getElementById('edit-body').value = email.bodyText || '';
-  }
-
-  async function regenerate() {
-    document.getElementById('preview-panel').classList.remove('visible');
-    await generateEmail();
-  }
-
-  // ── SEND ──────────────────────────────────────────────────────────────────
-
-  async function sendEmail() {
-    const btn = document.getElementById('send-btn');
-    const errEl = document.getElementById('send-error');
-    const successEl = document.getElementById('send-success');
-
-    errEl.classList.remove('visible');
-    successEl.classList.remove('visible');
-
-    const subject = document.getElementById('edit-subject').value.trim();
-    const previewText = document.getElementById('edit-preview-text').value.trim();
-    const bodyText = document.getElementById('edit-body').value.trim();
-
-    if (!subject || !bodyText) {
-      errEl.textContent = 'Subject and body are required.';
-      errEl.classList.add('visible');
-      return;
-    }
-
-    // Build simple HTML from the plain text body
-    const htmlBody = `<div style="font-family:Georgia,serif;font-size:17px;line-height:1.7;color:#2a2218;max-width:580px;">
-${bodyText.split('\n\n').map(p => `<p style="margin:0 0 1.2em 0;">${p.replace(/\n/g,'<br>')}</p>`).join('')}
-</div>`;
-
-    const confirmed = confirm(`Send "${subject}" to your entire list now?`);
-    if (!confirmed) return;
-
-    btn.disabled = true;
-    btn.innerHTML = 'Sending <span class="loading-dots"><span></span><span></span><span></span></span>';
-
-    try {
-      const res = await fetch(`${WORKER}/send`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Admin-Secret': adminSecret,
-        },
-        body: JSON.stringify({ subject, previewText, htmlBody, plainBody: bodyText }),
-      });
-
-      const data = await res.json();
-
-      if (!data.ok) {
-        errEl.textContent = data.error || 'Send failed. Check MailerLite and try again.';
-        errEl.classList.add('visible');
-        return;
-      }
-
-      // Show confirmation
-      document.getElementById('preview-panel').classList.remove('visible');
-      document.getElementById('compose-panel').querySelector('.card').style.display = 'none';
-      const confirm_el = document.getElementById('sent-confirm');
-      document.getElementById('sent-detail').textContent =
-        `"${subject}" is on its way to your readers.`;
-      confirm_el.classList.add('visible');
-
-      // Refresh status
-      const statusRes = await fetch(`${WORKER}/status`, {
-        headers: { 'X-Admin-Secret': adminSecret }
-      });
-      populateStatus(await statusRes.json());
-
-    } catch (e) {
-      errEl.textContent = 'Network error during send. Check MailerLite dashboard to confirm status.';
-      errEl.classList.add('visible');
-    } finally {
-      btn.disabled = false;
-      btn.textContent = 'Send to List';
-    }
-  }
-
-  // ── RESET ─────────────────────────────────────────────────────────────────
-
-  function resetForm() {
-    document.getElementById('update-text').value = '';
-    document.getElementById('tone-select').selectedIndex = 0;
-    document.getElementById('discount-toggle').checked = false;
-    document.getElementById('discount-fields').classList.remove('visible');
-    document.getElementById('discount-code').value = '';
-    document.getElementById('discount-note').value = '';
-    document.getElementById('preview-panel').classList.remove('visible');
-    document.getElementById('sent-confirm').classList.remove('visible');
-    document.getElementById('compose-panel').querySelector('.card').style.display = '';
-    document.getElementById('generate-error').classList.remove('visible');
-    document.getElementById('generate-info').classList.remove('visible');
-    currentEmail = null;
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }
+/* ═══════════════════════════ SETTINGS ═══════════════════════════ */
+function renderSettings() {
+  const a = S.author || {}; const b = Object.assign({ accent: '#a66e22', heading: '#1c2b4a', bg: '#f4f1ea' }, a.brand || {}); const cd = a.customDomain;
+  $('main').innerHTML = `${head('Settings', '', `<button class="btn btn-primary" onclick="ink.saveSettings(this)">Save</button>`)}
+  <div class="grid grid-2"><div>
+    <div class="card"><div class="card-head"><span class="g">✍</span><h3>Author profile</h3></div><div class="card-body">
+      <label>Pen name</label><input type="text" id="st-pen" value="${esc(a.penName || '')}"><label>Genre</label><input type="text" id="st-genre" value="${esc(a.genre || '')}"><label>Website</label><input type="url" id="st-web" value="${esc(a.webUrl || '')}"><label>Main buy link <span class="hint">({{buy_url}})</span></label><input type="url" id="st-buy" value="${esc(a.buyUrl || '')}">
+      <label>Voice notes for Ink's ghostwriter</label><textarea id="st-voice">${esc(a.voice || '')}</textarea><label>About you</label><textarea id="st-bio" style="min-height:60px">${esc(a.bio || '')}</textarea><label>Readers <span class="hint">(who they are, what they love)</span></label><input type="text" id="st-aud" value="${esc(a.audience || '')}">
+      <label>Books <span class="hint">(Title | Series | status | link — one per line)</span></label><textarea id="st-books">${esc((a.books || []).map(x => [x.title, x.series, x.status, x.link].join(' | ')).join('\n'))}</textarea>
+    </div></div>
+    <div class="card"><div class="card-head"><span class="g">◷</span><h3>Rhythm & nudges</h3></div><div class="card-body">
+      <div class="row"><div><label>Timezone</label><input type="text" id="st-tz" value="${esc(a.timezone || '')}"></div><div><label>Nudge hour</label><input type="number" min="0" max="23" id="st-nh" value="${a.nudgeHour ?? 8}"></div><div><label>Default send hour</label><input type="number" min="0" max="23" id="st-sh" value="${a.sendHour ?? 9}"></div></div>
+      <p class="small dim" style="margin-top:.75rem">Ink emails you at the nudge hour when a planned letter is drafted and waiting, when one is overdue, 48 hours after each send with results, and (at most weekly) if the list has gone quiet with no plan. <button class="btn btn-sm btn-ghost" onclick="ink.runNudge(this)">Run the check now</button></p>
+    </div></div>
+  </div><div>
+    <div class="card"><div class="card-head"><span class="g">✉</span><h3>Sending</h3></div><div class="card-body">
+      <div class="row"><div><label>From name</label><input type="text" id="st-from" value="${esc(a.fromName || a.penName || '')}"></div><div><label>From address <span class="hint">(before the @)</span></label><input type="text" id="st-local" value="${esc(a.fromLocal || a.slug || '')}"></div></div>
+      <div class="small dim" style="margin-top:.4rem">Readers see: <b style="color:var(--parch-mid)">${esc(a.fromName || a.penName || '')} &lt;${esc(a.fromLocal || a.slug || 'you')}@${cd?.status === 'verified' ? esc(cd.domain) : 'mail.ink.jacobsiler.com'}&gt;</b></div>
+      <label>Reply-to</label><input type="email" id="st-reply" value="${esc(a.replyTo || '')}">
+      <label>Sign-up address</label><div class="inline"><span class="dim small">/join/</span><input type="text" id="st-slug" value="${esc(a.slug || '')}" style="max-width:220px"><button class="btn btn-sm auto" onclick="ink.saveSlug(this)">Update</button></div>
+      <div class="toggle-row" style="margin-top:1rem"><div><b>Double opt-in</b><div class="small muted">New readers confirm by email first.</div></div><label class="toggle"><input type="checkbox" id="st-doi" ${a.doubleOptIn ? 'checked' : ''}><span class="s"></span></label></div>
+      <label>Postal address <span class="hint">(legally required in every marketing email)</span></label><input type="text" id="st-addr" value="${esc(a.postalAddress || '')}">
+      <label>Reader noun <span class="hint">(used when a reader has no name: "Hello friend")</span></label><input type="text" id="st-noun" value="${esc(a.readerNoun || 'friend')}">
+    </div></div>
+    <div class="card"><div class="card-head"><span class="g">⚑</span><h3>Your own sending domain <span class="dim small">(optional)</span></h3></div><div class="card-body">
+      ${cd ? `<div><b>${esc(cd.domain)}</b> — <span class="status ${cd.status === 'verified' ? 'active' : 'pending'}">${cd.status}</span></div>${cd.status !== 'verified' ? `<p class="small muted" style="margin-top:.5rem">Add these DNS records at your registrar, then verify:</p><div class="tbl-wrap"><table><thead><tr><th>Type</th><th>Name</th><th>Value</th></tr></thead><tbody>${(cd.records || []).map(r => `<tr><td>${esc(r.type)}</td><td class="code" style="font-size:.75rem">${esc(r.name)}</td><td class="code" style="font-size:.75rem;word-break:break-all">${esc(r.value)}</td></tr>`).join('')}</tbody></table></div>` : ''}<div class="actions" style="margin-top:.75rem"><button class="btn btn-sm" onclick="ink.verifyDomain(this)">Check verification</button><button class="btn btn-sm btn-danger" onclick="ink.removeDomain(this)">Remove</button></div>` :
+      `<p class="small muted">Send from your own domain (e.g. <code>news.skybridgesaga.com</code>) for the best deliverability and brand. Until it is verified, Ink sends from its shared domain with your name and reply-to.</p><div class="row"><div><input type="text" id="st-domain" placeholder="news.yourdomain.com"></div><div class="auto"><button class="btn" onclick="ink.addDomain(this)">Set up</button></div></div>`}
+      <div class="msg msg-error" id="st-dom-err"></div>
+    </div></div>
+    <div class="card"><div class="card-head"><span class="g">❧</span><h3>Email look</h3></div><div class="card-body">
+      <div class="row"><div><label>Accent</label><input type="text" id="st-b-accent" value="${esc(b.accent)}"></div><div><label>Headings</label><input type="text" id="st-b-heading" value="${esc(b.heading)}"></div><div><label>Background</label><input type="text" id="st-b-bg" value="${esc(b.bg)}"></div></div>
+      <label>Join page headline</label><input type="text" id="st-jh" value="${esc(a.joinHeadline || '')}" placeholder="Join ${esc(a.penName || '')}'s readers"><label>Join page blurb</label><textarea id="st-jb" style="min-height:60px">${esc(a.joinBlurb || '')}</textarea>
+    </div></div>
+    <div class="card"><div class="card-body small dim">Signed in as ${esc(S.user.email)}. Worker: <code>${esc(WORKER)}</code></div></div>
+  </div></div><div class="msg msg-error" id="st-err"></div>`;
+}
+ink.saveSettings = async (btn) => {
+  busy(btn, true, ''); hideMsg('st-err');
+  try {
+    const patch = { penName: $('st-pen').value.trim(), genre: $('st-genre').value.trim(), webUrl: $('st-web').value.trim(), buyUrl: $('st-buy').value.trim(), voice: $('st-voice').value.trim(), bio: $('st-bio').value.trim(), audience: $('st-aud').value.trim(), books: parseBooks($('st-books').value), timezone: $('st-tz').value.trim() || 'Europe/Dublin', nudgeHour: Number($('st-nh').value) || 8, sendHour: Number($('st-sh').value) ?? 9, fromName: $('st-from').value.trim(), fromLocal: $('st-local').value.trim().toLowerCase().replace(/[^a-z0-9.-]/g, ''), replyTo: $('st-reply').value.trim(), doubleOptIn: $('st-doi').checked, postalAddress: $('st-addr').value.trim(), readerNoun: $('st-noun').value.trim() || 'friend', brand: { accent: $('st-b-accent').value.trim(), heading: $('st-b-heading').value.trim(), bg: $('st-b-bg').value.trim(), link: $('st-b-accent').value.trim() }, joinHeadline: $('st-jh').value.trim(), joinBlurb: $('st-jb').value.trim(), updatedAt: nowIso() };
+    await updateDoc(aDoc(), patch); toast('Saved.');
+  } catch (e) { showMsg('st-err', e.message); } finally { busy(btn, false); }
+};
+ink.saveSlug = async (btn) => { busy(btn, true, ''); try { const r = await api('/me/slug', { slug: $('st-slug').value.trim() }); toast('Sign-up address updated: ' + r.joinUrl); } catch (e) { toast(e.message, 5000); } finally { busy(btn, false); } };
+ink.addDomain = async (btn) => { busy(btn, true, ''); hideMsg('st-dom-err'); try { await api('/domain', { domain: $('st-domain').value.trim() }); toast('Domain added — add the DNS records shown.'); } catch (e) { showMsg('st-dom-err', e.message); } finally { busy(btn, false); } };
+ink.verifyDomain = async (btn) => { busy(btn, true, ''); try { const r = await api('/domain/verify', {}); toast(r.status === 'verified' ? 'Verified — you now send from your own domain.' : 'Not verified yet (' + r.status + '). DNS can take up to an hour.'); } catch (e) { showMsg('st-dom-err', e.message); } finally { busy(btn, false); } };
+ink.removeDomain = async (btn) => { if (!(await confirmModal('Remove domain?', 'Ink will go back to its shared sending domain.', 'Remove', true))) return; try { await api('/domain', {}, 'DELETE'); } catch (e) { showMsg('st-dom-err', e.message); } };
+ink.runNudge = async (btn) => { busy(btn, true, ''); try { await api('/nudge/run', {}); toast('Checked. Anything due is now in Approvals (and your inbox).'); } catch (e) { toast(e.message, 5000); } finally { busy(btn, false); } };
 </script>
-
 </body>
 </html>

@@ -1,0 +1,26 @@
+name = "ink-worker"
+main = "src/index.js"
+compatibility_date = "2025-06-01"
+workers_dev = true
+
+# Runs every 5 minutes: scheduled sends, welcome sequences, nudges, 48h reports.
+[triggers]
+crons = ["*/5 * * * *"]
+
+[vars]
+FIREBASE_PROJECT_ID = "miscellaneous-117e9"
+FIREBASE_WEB_API_KEY = "AIzaSyDxLI57pgS9WX1ekMerbcx8M6aVeWacpy0"
+GEMINI_MODEL = "gemini-2.5-flash"
+# Shared sending domain — verify it in Resend (see README). Authors send as penname@this-domain.
+INK_FROM_DOMAIN = "mail.ink.jacobsiler.com"
+# Where the app lives (links in nudge emails)
+APP_URL = "https://ink.jacobsiler.com"
+# This Worker's public URL (join pages, unsubscribe links, approve links). Use a custom route if you add one.
+PUBLIC_URL = "https://ink-worker.jacobdsiler.workers.dev"
+
+# Secrets — set with `wrangler secret put NAME`:
+#   FIREBASE_SERVICE_ACCOUNT  (the whole service-account JSON, one line)
+#   RESEND_API_KEY
+#   RESEND_WEBHOOK_SECRET     (whsec_… from the Resend webhook page)
+#   GEMINI_API_KEY
+#   INK_SIGNING_SECRET        (any long random string; signs unsubscribe/confirm/approve links)
