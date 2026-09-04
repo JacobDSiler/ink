@@ -382,7 +382,8 @@ onAuthStateChanged(auth, async (user) => {
 
 function startApp() {
   $('app').classList.add('visible');
-  api('/me').then(m => { S.me = m; }).catch(() => { });
+  api('/me').then(m => { S.me = m; if (S.view === 'settings' || S.view === 'readers') render(); }).catch(() => { });
+  loadSubs().then(() => { if (S.view === 'dashboard') render(); }).catch(() => { });
   S.unsub.push(onSnapshot(aDoc(), s => { S.author = s.data() || {}; $('brand-sub').textContent = S.author.penName || 'Author mailer'; if (S.view === 'dashboard' || S.view === 'settings') render(); }));
   S.unsub.push(onSnapshot(query(aCol('campaigns'), orderBy('updatedAt', 'desc'), limit(300)), s => { S.campaigns = s.docs.map(d => ({ id: d.id, ...d.data() })); if (['dashboard', 'campaigns', 'analytics', 'campaign', 'plan'].includes(S.view)) render(); }));
   S.unsub.push(onSnapshot(query(aCol('plans'), orderBy('createdAt', 'desc'), limit(50)), s => { S.plans = s.docs.map(d => ({ id: d.id, ...d.data() })); if (['dashboard', 'plan'].includes(S.view)) render(); }));
@@ -486,10 +487,11 @@ function renderDashboard() {
   const sugg = S.suggestions.slice(0, 4);
   const drafts = S.campaigns.filter(c => c.status === 'draft').slice(0, 3);
   const scheduled = S.campaigns.filter(c => c.status === 'scheduled' || c.status === 'sending');
-  const starting = !(a.subscriberCount > 0) || !sent.length;
+  const liveCount = S.subs ? S.subs.filter(x => x.status === 'active').length : (a.subscriberCount || 0);
+  const starting = !(liveCount > 0) || !sent.length;
   const checklist = starting ? `<div class="card"><div class="card-head"><span class="g">❧</span><h3>Getting started</h3></div><div class="card-body">
     ${[[a.postalAddress, 'Add your postal address', 'Required in the footer of every marketing email.', '#settings'],
-       [a.subscriberCount > 0, 'Bring your readers in', 'Import a CSV from Folio, MailerLite, Mailchimp or Substack — or share your sign-up page.', '#readers'],
+       [liveCount > 0, 'Bring your readers in', 'Import a CSV from Folio, MailerLite, Mailchimp or Substack — or share your sign-up page.', '#readers'],
        [S.welcome && S.welcome.enabled, 'Switch on the welcome series', 'Three letters every new reader gets automatically. Already written; edit to taste.', '#automations'],
        [sent.length > 0, 'Send your first letter', 'Give Ink two sentences and it drafts the rest in your voice.', '#compose/monthly-letter'],
        [S.plans.some(p => p.status === 'active'), 'Start a plan', 'Ink keeps the schedule, drafts each letter early, and asks you to approve.', '#plan']]
@@ -499,7 +501,7 @@ function renderDashboard() {
   ${head(`Good ${new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 18 ? 'afternoon' : 'evening'}, ${esc(a.penName || '')}`, `${new Date().toLocaleDateString('en-IE', { weekday: 'long', day: 'numeric', month: 'long' })}`,
     `<a class="btn btn-primary" href="#compose/monthly-letter">✍ Draft a letter</a><a class="btn" href="#readers">Add readers</a>`)}
   <div class="tiles">
-    <div class="tile"><div class="l">Readers</div><div class="v cav">${(a.subscriberCount || 0).toLocaleString()}</div><div class="d">${growth30()}</div></div>
+    <div class="tile"><div class="l">Readers</div><div class="v cav">${liveCount.toLocaleString()}</div><div class="d">${growth30()}</div></div>
     <div class="tile"><div class="l">Last letter</div><div class="v brass" style="font-size:1.3rem;padding-top:.3rem">${a.lastSentAt ? fmtDate(a.lastSentAt) : 'Never'}</div><div class="d" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.lastSentSubject || '')}</div></div>
     <div class="tile"><div class="l">Avg open rate</div><div class="v">${sent.length ? Math.round(h.openRate * 100) + '%' : '—'}</div><div class="d">last ${Math.min(3, sent.length) || '—'} letters · benchmark 35%+</div></div>
     <div class="tile"><div class="l">List health</div><div class="v" style="color:${h.score >= 70 ? '#a8d8a4' : h.score >= 40 ? 'var(--brass-light)' : '#f0a080'}">${h.score}</div><div class="health"><i style="width:${h.score}%;background:${h.score >= 70 ? 'var(--moss)' : h.score >= 40 ? 'var(--brass)' : 'var(--ember)'}"></i></div></div>
@@ -778,7 +780,11 @@ async function loadSubs(force) {
     const snap = await getDocs(q); snap.docs.forEach(d => out.push({ id: d.id, ...d.data() }));
     if (snap.docs.length < 5000) break; last = snap.docs[snap.docs.length - 1];
   }
-  S.subs = out; return S.subs;
+  S.subs = out;
+  // keep the header count on the author record honest even if the Worker's recount is unavailable
+  const active = out.filter(x => x.status === 'active').length;
+  if (S.author && S.author.subscriberCount !== active) { S.author.subscriberCount = active; updateDoc(aDoc(), { subscriberCount: active }).catch(() => { }); }
+  return S.subs;
 }
 function allTags() { const t = new Set(); (S.subs || []).forEach(s => (s.tags || []).forEach(x => t.add(x))); return [...t].sort(); }
 let readersFilter = { q: '', status: 'active', tag: '' };
@@ -926,7 +932,7 @@ function renderSettings() {
   </div><div>
     <div class="card"><div class="card-head"><span class="g">✉</span><h3>Sending</h3></div><div class="card-body">
       <div class="row"><div><label>From name</label><input type="text" id="st-from" value="${esc(a.fromName || a.penName || '')}"></div><div><label>From address <span class="hint">(before the @)</span></label><input type="text" id="st-local" value="${esc(a.fromLocal || a.slug || '')}"></div></div>
-      <div class="small dim" style="margin-top:.4rem">Readers see: <b style="color:var(--parch-mid)">${esc(a.fromName || a.penName || '')} &lt;${esc(a.fromLocal || a.slug || 'you')}@${cd?.status === 'verified' ? esc(cd.domain) : esc((S.me && S.me.fromDomain) || 'ink')}&gt;</b></div>
+      <div class="small dim" style="margin-top:.4rem">Readers see: <b style="color:var(--parch-mid)">${esc(a.fromName || a.penName || '')} &lt;${esc(a.fromLocal || a.slug || 'you')}@${cd?.status === 'verified' ? esc(cd.domain) : esc((S.me && S.me.fromDomain) || 'mail.ink.jacobsiler.com')}&gt;</b></div>
       <label>Reply-to</label><input type="email" id="st-reply" value="${esc(a.replyTo || '')}">
       <label>Sign-up address</label><div class="inline"><span class="dim small">/join/</span><input type="text" id="st-slug" value="${esc(a.slug || '')}" style="max-width:220px"><button class="btn btn-sm auto" onclick="ink.saveSlug(this)">Update</button></div>
       <div class="toggle-row" style="margin-top:1rem"><div><b>Double opt-in</b><div class="small muted">New readers confirm by email first.</div></div><label class="toggle"><input type="checkbox" id="st-doi" ${a.doubleOptIn ? 'checked' : ''}><span class="s"></span></label></div>

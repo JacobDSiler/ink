@@ -86,6 +86,8 @@ if errorlevel 1 (
   echo  [worker] Secrets are set once with:  npx wrangler secret put NAME
 ) else (
   echo  [worker] done.
+  echo  [worker] secrets currently set on the Worker ^(need FIREBASE_SERVICE_ACCOUNT, RESEND_API_KEY, RESEND_WEBHOOK_SECRET, GEMINI_API_KEY, INK_SIGNING_SECRET^):
+  call npx wrangler secret list
 )
 popd
 goto :end

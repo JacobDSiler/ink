@@ -735,8 +735,15 @@ async function handleResendEvent(env, db, evt) {
 
 // ─────────────────────────────────────────────────────────────── router ──
 
+const REQUIRED_SECRETS = ['FIREBASE_SERVICE_ACCOUNT', 'RESEND_API_KEY', 'GEMINI_API_KEY', 'INK_SIGNING_SECRET'];
+function missingConfig(env) { return REQUIRED_SECRETS.filter(k => !env[k]); }
+
 async function route(request, env, ctx) {
   const url = new URL(request.url);
+  const missing = missingConfig(env);
+  if (missing.length && !['/', '/health'].includes(url.pathname.replace(/\/+$/, '') || '/')) {
+    throw new HttpError(503, `Ink's server is not fully configured yet — missing secret${missing.length > 1 ? 's' : ''}: ${missing.join(', ')}. Set ${missing.length > 1 ? 'them' : 'it'} with "npx wrangler secret put NAME" in the worker folder, then try again.`);
+  }
   const path = url.pathname.replace(/\/+$/, '') || '/';
   const parts = path.split('/').filter(Boolean);
   const m = request.method;
@@ -744,7 +751,7 @@ async function route(request, env, ctx) {
   const db = new Firestore(env);
 
   // ── public ──
-  if (path === '/' || path === '/health') return json({ ok: true, service: 'ink-worker', time: nowIso() });
+  if (path === '/' || path === '/health') return json({ ok: true, service: 'ink-worker', time: nowIso(), configured: missingConfig(env).length === 0, missing: missingConfig(env) });
   if (path === '/embed.js') return new Response(embedScript(env), { headers: { 'Content-Type': 'application/javascript', 'Cache-Control': 'public, max-age=3600', ...CORS } });
 
   if (parts[0] === 'join' && parts[1]) {
