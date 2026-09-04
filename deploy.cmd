@@ -67,17 +67,20 @@ if not exist "worker\wrangler.toml" (
   goto :end
 )
 pushd worker
-if not exist "node_modules\.bin\wrangler.cmd" (
-  echo  [worker] installing wrangler ^(first run only^)...
-  call npm install --no-audit --no-fund
-  if errorlevel 1 (
-    echo  [worker] npm install FAILED - is Node.js installed?
-    popd
-    goto :end
-  )
+echo  [worker] checking wrangler ^(npm install; instant when up to date^)...
+call npm install --no-audit --no-fund --loglevel=error
+if errorlevel 1 (
+  echo  [worker] npm install FAILED - is Node.js installed?
+  popd
+  goto :end
 )
 echo  [worker] deploying ink-worker...
 call npx wrangler deploy
+if errorlevel 1 (
+  echo  [worker] first attempt failed - retrying once ^(Cloudflare API hiccups are common^)...
+  timeout /t 5 /nobreak >nul
+  call npx wrangler deploy
+)
 if errorlevel 1 (
   echo  [worker] FAILED. If you are not logged in, run:  npx wrangler login
   echo  [worker] Secrets are set once with:  npx wrangler secret put NAME
