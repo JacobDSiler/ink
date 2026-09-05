@@ -38,18 +38,12 @@ legacy/index.html     the original single-author Ink Room page
 ### 3. Gemini
 Create a key at aistudio.google.com → `GEMINI_API_KEY`. Model is set in `wrangler.toml` (`gemini-2.5-flash`).
 
-### 4. Deploy the Worker
-```bash
-cd worker
-npm install
-npx wrangler login
-npx wrangler secret put FIREBASE_SERVICE_ACCOUNT   # paste the JSON on one line
-npx wrangler secret put RESEND_API_KEY
-npx wrangler secret put RESEND_WEBHOOK_SECRET
-npx wrangler secret put GEMINI_API_KEY
-npx wrangler secret put INK_SIGNING_SECRET         # e.g. openssl rand -base64 48
-npx wrangler deploy
-```
+### 4. Secrets — keep them in ONE file
+Copy `worker/.dev.vars.example` to `worker/.dev.vars` (git-ignored), fill in the five values (each line says where it comes from), then double-click `worker/push-secrets.cmd`. That uploads them all to the Worker in one go and prints what is set. Re-run any time you change one. `wrangler dev` reads the same file for local testing.
+
+Alternative: `worker/set-secrets.cmd` prompts for each secret interactively; or `npx wrangler secret put NAME` one at a time.
+
+Then deploy with `deploy.cmd` (or `cd worker && npx wrangler login && npx wrangler deploy`).
 Check ``wrangler.toml` binds the Worker to the custom domain `go.jacobsiler.com` (wrangler creates the DNS record in your Cloudflare zone on deploy); `PUBLIC_URL` there and `WORKER` at the top of `index.html` must match it. The cron (`*/5 * * * *`) is registered on deploy.
 
 ### 5. Publish the app

@@ -1,0 +1,25 @@
+# Ink Worker secrets — ONE place to keep them.
+#
+#   1. Copy this file to  .dev.vars  (same folder). .dev.vars is git-ignored and never leaves your disk.
+#   2. Fill in the values below (no quotes needed unless the value has spaces).
+#   3. Double-click  push-secrets.cmd  — it uploads every line to the Worker in one go.
+#
+# .dev.vars is also what `wrangler dev` reads for local testing, so it does double duty.
+
+# Firebase console > Project settings > Service accounts > Generate new private key.
+# Paste the WHOLE JSON on one line (it starts with {"type":"service_account", ...).
+FIREBASE_SERVICE_ACCOUNT=
+
+# resend.com > API Keys > Create API key (name it "ink")
+RESEND_API_KEY=
+
+# resend.com > Webhooks > your Ink webhook (https://go.jacobsiler.com/webhooks/resend) > Signing secret
+RESEND_WEBHOOK_SECRET=
+
+# aistudio.google.com > API keys (existing keys are listed there and can be copied)
+GEMINI_API_KEY=
+
+# Any long random string (48+ characters). Signs Ink's unsubscribe / confirm / approve links.
+# Generate one in a PowerShell window with:
+#   -join ((48..57)+(65..90)+(97..122) | Get-Random -Count 48 | ForEach-Object { [char]$_ })
+INK_SIGNING_SECRET=

@@ -5,3 +5,4 @@ worker/.dev.vars
 *service-account*.json
 .firebase/
 firebase-debug.log
+.dev.vars.tmp
