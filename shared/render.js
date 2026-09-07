@@ -7,7 +7,7 @@
  *   **bold**  *italic*    [link text](https://…)   [button: Label](https://…)
  *   - list item
  *   ![alt](https://image.url)
- * Merge fields: {{first_name}} {{name}} {{pen_name}} {{unsubscribe_url}} {{web_url}}
+ * Merge fields: {{first_name}} {{name}} {{pen_name}} {{unsubscribe_url}} {{web_url}} {{buy_url}} {{keep_url}}
  */
 (function (root) {
   function escapeHtml(s) {
@@ -33,7 +33,8 @@
       unsubscribe_url: vars.unsubscribe_url || '#',
       web_url: vars.web_url || '',
       book_title: vars.book_title || '',
-      buy_url: vars.buy_url || ''
+      buy_url: vars.buy_url || '',
+      keep_url: vars.keep_url || '#'
     };
     return String(text || '').replace(/\{\{\s*([a-z_]+)\s*\}\}/gi, function (m, k) {
       k = k.toLowerCase();

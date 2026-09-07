@@ -89,6 +89,57 @@
         'Hit reply with A or B (and a sentence on why, if you like). I will share the result next letter.\n\n' +
         'Thank you,\n{{pen_name}}'
     },
+    // ── Revival (cold lists) ─────────────────────────────────────────
+    {
+      id: 'revival-1', name: 'Revival 1 — do you still want these?', category: 'Revival',
+      purpose: 'First letter of a list revival: honest, short, no guilt. Ask cold readers to click one button to stay on the list; make leaving easy.',
+      subject: 'Do you still want to hear from me, {{first_name}}?',
+      previewText: 'One click keeps you on the list. No click and I will stop writing.',
+      body:
+        'Hello {{first_name}},\n\n' +
+        'It has been a long while since you heard from me — [that is on me: life, a book, a move, whatever the honest reason is].\n\n' +
+        'I am starting to write to readers again, about [one letter a month: news from the desk, the world of the books, and the occasional gift]. But I would rather ask than assume.\n\n' +
+        '[button: Yes, keep me on the list]({{keep_url}})\n\n' +
+        'If you would rather not, do nothing — after a few letters I will quietly take you off, and there is an unsubscribe link below if you want it gone today.\n\n' +
+        'Either way, thank you for reading, once,\n{{pen_name}}'
+    },
+    {
+      id: 'revival-2', name: 'Revival 2 — a gift', category: 'Revival',
+      purpose: 'Second revival letter: give something worth opening (a free story, a chapter, a piece of the world) and repeat the one-click stay button.',
+      subject: 'A small gift, no strings',
+      previewText: '[Story / chapter title] — yours, whether or not you stay.',
+      body:
+        '{{first_name}},\n\n' +
+        'Last time I asked whether you still wanted letters from me. This time I would rather show you the kind of thing you would get.\n\n' +
+        '[Two sentences about the free story, deleted scene, or chapter — what it is and where it sits.]\n\n' +
+        '[button: Read [Story Title]](https://example.com/story)\n\n' +
+        'If you enjoy it and want more, one click keeps you on the list: [Yes, keep me]({{keep_url}})\n\n' +
+        '{{pen_name}}'
+    },
+    {
+      id: 'revival-3', name: 'Revival 3 — the story behind the silence', category: 'Revival',
+      purpose: 'Third revival letter: a personal, specific story about what happened while the author was quiet, and what is coming. Stay button once more.',
+      subject: 'What I was doing while I wasn\'t writing to you',
+      previewText: 'The honest version.',
+      body:
+        'Dear {{first_name}},\n\n' +
+        '[Three or four short paragraphs: the real story of the quiet stretch — the book that fought back, the thing that got finished, one concrete scene or moment. Specific beats general.]\n\n' +
+        'Here is what is coming next: [the next book / launch / plan, in one sentence each].\n\n' +
+        'If that sounds like something you would like to follow along with: [button: Keep me on the list]({{keep_url}})\n\n' +
+        '{{pen_name}}'
+    },
+    {
+      id: 'revival-4', name: 'Revival 4 — last letter', category: 'Revival',
+      purpose: 'Final revival letter: this is the last email unless the reader clicks to stay. Warm, brief, no pressure, one button.',
+      subject: 'Last letter (unless you say otherwise)',
+      previewText: 'After this I will stop, with no hard feelings.',
+      body:
+        '{{first_name}},\n\n' +
+        'This is the last letter I will send unless you tell me you would like more. I would rather write to a hundred readers who want it than a thousand who do not.\n\n' +
+        '[button: Yes — keep writing to me]({{keep_url}})\n\n' +
+        'If I do not hear from you, I will take you off the list in a few days. Thank you for the time you gave my books; it meant something.\n\n' +
+        'Warmly,\n{{pen_name}}'
+    },
     {
       id: 're-engage', name: 'Re-engagement (quiet readers)', category: 'Nurture',
       purpose: 'Win back readers who have not opened in months: warm, honest, no guilt, one reason to stay and an easy way to leave.',
@@ -334,8 +385,20 @@
       ]
     },
     {
-      id: 'rewarm', name: 'List re-warm (3 weeks)', anchorLabel: 'Start date',
-      description: 'For a list that has gone quiet: three honest letters that rebuild the habit before you ask for anything.',
+      id: 'revival', name: 'List revival + clean-up (4 weeks)', anchorLabel: 'Start date',
+      description: 'For a cold or long-neglected list. Four honest letters to the quiet readers, each with a one-click "keep me" button; then Ink asks your approval to archive everyone who never opened, clicked, or said yes. You keep the readers worth keeping and your sender reputation stops paying for the rest.',
+      leadDays: 3, revival: true,
+      items: [
+        { offsetDays: 0, templateId: 'revival-1', title: 'Do you still want these?', segment: 'quiet' },
+        { offsetDays: 7, templateId: 'revival-2', title: 'A gift, no strings', segment: 'quiet' },
+        { offsetDays: 14, templateId: 'revival-3', title: 'The story behind the silence', segment: 'quiet' },
+        { offsetDays: 21, templateId: 'revival-4', title: 'Last letter unless you click', segment: 'quiet' },
+        { offsetDays: 28, action: 'prune', title: 'Archive readers who never responded' }
+      ]
+    },
+    {
+      id: 'rewarm', name: 'Gentle re-warm (3 weeks)', anchorLabel: 'Start date',
+      description: 'For a list that has merely gone quiet (not cold): three honest letters that rebuild the habit before you ask for anything. No clean-up step.',
       leadDays: 3,
       items: [
         { offsetDays: 0, templateId: 're-engage', title: 'Still with me?' },

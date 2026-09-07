@@ -478,6 +478,7 @@ function healthScore() {
   const last3 = sent.slice(0, 3); const or = last3.length ? last3.reduce((s, c) => s + ((c.stats?.uniqueOpens || 0) / Math.max(1, c.stats?.sent || 1)), 0) / last3.length : 0;
   if (last3.length) { if (or >= .35) score += 25; else if (or >= .2) { score += 12; notes.push('Open rate is below the 35% benchmark.'); } else notes.push('Open rate is weak — try more personal subject lines.'); }
   if (a.slug) score += 10; else notes.push('Set up your sign-up page.');
+  if (S.subs) { const act = S.subs.filter(x => x.status === 'active'); const cold = act.filter(x => { const last = [x.lastOpenAt, x.lastClickAt, x.reconfirmedAt].filter(Boolean).sort().pop(); return !last || Date.now() - new Date(last).getTime() > 120 * 864e5; }).length; if (act.length >= 20 && cold / act.length >= 0.5 && sent.length > 0 && !S.plans.some(p => p.status === 'active' && p.playbookId === 'revival')) notes.push('Most of your list is cold — run the List revival plan from Readers before your next big send.'); }
   return { score, notes, openRate: or };
 }
 function renderDashboard() {
@@ -534,10 +535,28 @@ function suggHtml(s) {
     : s.campaignId ? `<a class="btn btn-sm" href="#campaign/${s.campaignId}">Open</a>`
     : s.actionType === 'send-reengage' ? `<a class="btn btn-sm btn-primary" href="#compose/re-engage">Draft it</a>`
     : s.actionType === 'add-plan' ? `<a class="btn btn-sm btn-primary" href="#plan">Start a plan</a>`
+    : s.type === 'prune' ? `<button class="btn btn-sm btn-primary" onclick="ink.approvePrune('${s.id}',this)">Archive ${s.count || ''} readers</button>`
     : s.actionType === 'adjust-subject' ? `<a class="btn btn-sm btn-primary" href="#compose">Write with this in mind</a>` : '';
   const done = s.type === 'draft' ? '' : `<button class="btn btn-sm" onclick="ink.resolveSugg('${s.id}','done')" title="Mark as read / acted on">Done</button>`;
   return `<div class="list-item sugg ${s.type}"><div class="main"><div class="title">${esc(s.title)}</div><div class="sub">${esc(s.body || '')}</div>${s.type === 'draft' ? `<div class="small dim" style="margin-top:.2rem">A draft is approved from inside the letter (Approve & schedule / Approve & send now). Dismiss only removes this reminder; the draft stays in Letters.</div>` : ''}</div><div class="actions">${primary}${done}<button class="btn btn-sm btn-ghost" onclick="ink.resolveSugg('${s.id}','dismissed')">Dismiss</button></div></div>`;
 }
+ink.pruneNow = async (anchorDate, planId, itemId, btn) => {
+  const since = anchorDate ? new Date(anchorDate + 'T00:00:00Z').toISOString() : new Date(Date.now() - 120 * 864e5).toISOString();
+  busy(btn, true, 'Counting');
+  try {
+    const d = await api('/list/prune', { since, dryRun: true });
+    busy(btn, false);
+    if (!d.count) return toast('Nobody to archive — every reader has opened, clicked, or said "keep me" since ' + fmtDate(since) + '.', 5000);
+    if (!(await confirmModal(`Archive ${d.count} readers?`, `They neither opened, clicked, nor said "keep me" since <b>${fmtDate(since)}</b>. Archived readers stop receiving letters, stop counting against your sender reputation, and stay on file — you can restore any of them from Readers, and a reader who clicks an old "keep me" link comes back automatically.`, `Archive ${d.count}`, true))) return;
+    busy(btn, true, 'Archiving');
+    const r = await api('/list/prune', { since, planId: planId || null, itemId: itemId || null });
+    S.subs = null; toast(`Archived ${r.archived}. ${r.subscriberCount.toLocaleString()} active readers remain.`, 6000);
+    if (S.view === 'readers') renderReaders();
+    return true;
+  } catch (e) { toast(e.message, 6000); } finally { busy(btn, false); }
+  return false;
+};
+ink.approvePrune = async (sid, btn) => { const sg = S.suggestions.find(x => x.id === sid); if (!sg) return; const ok = await ink.pruneNow(sg.since ? sg.since.slice(0, 10) : null, sg.planId, sg.itemId, btn); if (ok) await ink.resolveSugg(sid, 'approved'); };
 ink.resolveSugg = async (id, status) => { await updateDoc(aDoc('suggestions', id), { status, resolvedAt: nowIso() }); };
 ink.dismissSugg = (id) => ink.resolveSugg(id, 'dismissed');
 ink.clearSuggestions = async () => { if (!S.suggestions.length) return; if (!(await confirmModal('Clear all?', `Marks all ${S.suggestions.length} items as dismissed. Drafts stay in Letters; nothing is deleted or sent.`, 'Clear all'))) return; const b = writeBatch(db); S.suggestions.forEach(x => b.update(aDoc('suggestions', x.id), { status: 'dismissed', resolvedAt: nowIso() })); await b.commit(); toast('Cleared.'); };
@@ -616,7 +635,7 @@ function renderCampaign(id) {
         <label>Subject line ${locked ? '' : `<button class="btn btn-sm btn-ghost" style="float:right;margin-top:-4px" onclick="ink.aiSubjects('${id}',this)">✦ Suggest subjects</button>`}</label><input type="text" id="ed-subject" value="${esc(c.subject || '')}" ${locked ? 'disabled' : ''} style="font-family:var(--serif);font-size:1.15rem">
         <div id="ed-alts">${(c.subjectAlternatives || []).length ? c.subjectAlternatives.map(s => `<button class="subj-alt" onclick="ink.useSubject(this)">${esc(s)}</button>`).join('') : ''}</div>
         <label>Preview text <span class="hint">(the grey line after the subject in the inbox)</span></label><input type="text" id="ed-preview" value="${esc(c.previewText || '')}" ${locked ? 'disabled' : ''}>
-        <label>Body <span class="hint">— **bold**, *italic*, [link](url), [button: Label](url), ## heading, > quote, ---, {{first_name}}</span></label>
+        <label>Body <span class="hint">— **bold**, *italic*, [link](url), [button: Label](url), ## heading, > quote, ---, {{first_name}}, {{keep_url}} (one-click "keep me")</span></label>
         <textarea id="ed-body" class="body" ${locked ? 'disabled' : ''}>${esc(c.body || '')}</textarea>
         ${c.aiNotes ? `<div class="msg msg-info visible">Ink: ${esc(c.aiNotes)}</div>` : ''}
         ${locked ? '' : `<div class="row" style="margin-top:.75rem"><div><input type="text" id="ed-polish" placeholder="Ask Ink to tweak: 'shorter', 'warmer opening', 'add a line about the audiobook'…"></div><div class="auto"><button class="btn" onclick="ink.aiPolish('${id}',this)">✦ Tweak</button></div></div>`}
@@ -667,7 +686,7 @@ async function saveEditor(id) {
 }
 function updatePreview() {
   const v = editorValues(); const a = S.author || {}; const f = $('ed-frame'); if (!f) return;
-  const r = R.renderEmail({ subject: v.subject, previewText: v.previewText, body: v.body, brand: a.brand, author: { penName: a.penName, address: a.postalAddress, webUrl: a.webUrl }, vars: { name: 'Reader', first_name: 'Reader', pen_name: a.penName, web_url: a.webUrl, buy_url: a.buyUrl || (a.books || [])[0]?.link || a.webUrl || '#', book_title: (a.books || [])[0]?.title || '', unsubscribe_url: '#' } });
+  const r = R.renderEmail({ subject: v.subject, previewText: v.previewText, body: v.body, brand: a.brand, author: { penName: a.penName, address: a.postalAddress, webUrl: a.webUrl }, vars: { name: 'Reader', first_name: 'Reader', pen_name: a.penName, web_url: a.webUrl, buy_url: a.buyUrl || (a.books || [])[0]?.link || a.webUrl || '#', book_title: (a.books || [])[0]?.title || '', unsubscribe_url: '#', keep_url: '#' } });
   f.srcdoc = r.html;
 }
 ink.useSubject = (btn) => { $('ed-subject').value = btn.textContent; $('ed-subject').dispatchEvent(new Event('input')); };
@@ -743,8 +762,8 @@ function renderPlanDetail(p) {
   <div class="card"><div class="card-body">
     ${(p.items || []).map(it => { const past = it.dueDate < today; const due = !past && (new Date(it.dueDate) - Date.now()) / 864e5 <= (p.leadDays || 3); const c = it.campaignId && S.campaigns.find(x => x.id === it.campaignId); return `<div class="plan-item ${past && it.status !== 'sent' ? 'past' : ''} ${due ? 'due' : ''}">
       <div class="date">${fmtDate(it.dueDate + 'T12:00:00Z', { day: 'numeric', month: 'short' })}<small>${fmtDate(it.dueDate + 'T12:00:00Z', { weekday: 'short' })}</small></div>
-      <div><div style="color:var(--parch)">${esc(it.title)} <span class="status ${it.status}">${it.status}</span></div><div class="small muted">${esc((T.byId(it.templateId) || {}).name || '')}${it.segment ? ' · ' + esc(it.segment) : ''}${c && c.status === 'sent' ? ` · ${pct(c.stats?.uniqueOpens, c.stats?.sent)} opened` : ''}</div>${it.brief ? `<div class="small dim">${esc(it.brief)}</div>` : ''}</div>
-      <div class="acts inline">${it.status === 'sent' ? `<a class="btn btn-sm" href="#campaign/${it.campaignId}">Report</a>` : it.campaignId ? `<a class="btn btn-sm btn-primary" href="#campaign/${it.campaignId}">Review</a>` : it.status === 'skipped' ? '' : `<button class="btn btn-sm btn-primary" onclick="ink.draftPlanItem('${p.id}','${it.id}',this)">✦ Draft now</button><a class="btn btn-sm" href="#compose/${it.templateId}/${p.id}:${it.id}">Write myself</a>`}
+      <div><div style="color:var(--parch)">${esc(it.title)} <span class="status ${it.status}">${it.status === 'drafted' && it.action ? 'awaiting approval' : it.status}</span></div><div class="small muted">${it.action === 'prune' ? 'Clean-up step — when due, Ink counts the readers who never responded and asks you to approve archiving them. Nothing is archived without you.' : esc((T.byId(it.templateId) || {}).name || '')}${it.segment ? ' · ' + esc(it.segment === 'quiet' ? 'quiet readers only' : it.segment) : ''}${c && c.status === 'sent' ? ` · ${pct(c.stats?.uniqueOpens, c.stats?.sent)} opened${c.stats?.kept ? ` · ${c.stats.kept} clicked "keep me"` : ''}` : ''}${it.status === 'sent' && it.archivedCount != null ? ` · ${it.archivedCount} archived` : ''}</div>${it.brief ? `<div class="small dim">${esc(it.brief)}</div>` : ''}</div>
+      <div class="acts inline">${it.action === 'prune' ? (it.status === 'sent' ? '' : it.status === 'drafted' ? `<a class="btn btn-sm btn-primary" href="#approvals">Approve in Approvals</a>` : it.status === 'skipped' ? '' : `<button class="btn btn-sm" onclick="ink.pruneNow('${p.anchorDate}','${p.id}','${it.id}',this)">Run clean-up now</button>`) : it.status === 'sent' ? `<a class="btn btn-sm" href="#campaign/${it.campaignId}">Report</a>` : it.campaignId ? `<a class="btn btn-sm btn-primary" href="#campaign/${it.campaignId}">Review</a>` : it.status === 'skipped' ? '' : `<button class="btn btn-sm btn-primary" onclick="ink.draftPlanItem('${p.id}','${it.id}',this)">✦ Draft now</button><a class="btn btn-sm" href="#compose/${it.templateId}/${p.id}:${it.id}">Write myself</a>`}
       ${['sent', 'skipped'].includes(it.status) ? '' : `<button class="btn btn-sm btn-ghost" onclick="ink.editPlanItem('${p.id}','${it.id}')">Edit</button><button class="btn btn-sm btn-ghost" onclick="ink.skipPlanItem('${p.id}','${it.id}')">Skip</button>`}</div></div>`; }).join('')}
   </div></div>`;
 }
@@ -766,7 +785,7 @@ ink.aiPlan = async (btn) => { const goal = $('np-goal').value.trim(); if (!goal)
 ink.createPlan = async (btn) => {
   const pb = T.playbookById($('np-pb').value); const anchor = $('np-date').value; if (!anchor) return showMsg('np-err', 'Pick the anchor date.');
   const briefs = JSON.parse($('np-pb').dataset.briefs || '{}'); const t = nowIso(); const id = rid();
-  const items = pb.items.map((it, i) => ({ id: rid(), title: it.title, templateId: it.templateId, offsetDays: it.offsetDays, dueDate: addDaysStr(anchor, it.offsetDays), status: 'upcoming', segment: it.segment || null, brief: briefs[String(i)] || '', campaignId: null }));
+  const items = pb.items.map((it, i) => ({ id: rid(), title: it.title, templateId: it.templateId || null, action: it.action || null, offsetDays: it.offsetDays, dueDate: addDaysStr(anchor, it.offsetDays), status: 'upcoming', segment: it.segment || null, brief: briefs[String(i)] || '', campaignId: null }));
   await setDoc(aDoc('plans', id), { name: $('np-name').value.trim() || pb.name, playbookId: pb.id, anchorDate: anchor, leadDays: pb.leadDays || 3, brief: $('np-brief').value.trim(), rationale: $('np-desc').textContent.startsWith('Ink:') ? $('np-desc').textContent.slice(4).trim() : '', status: 'active', items, createdAt: t, updatedAt: t });
   closeModal(); location.hash = '#plan/' + id; toast('Plan created. Ink will draft each letter as it comes due.');
 };
@@ -807,19 +826,34 @@ async function renderReaders() {
   $('main').innerHTML = `${head('Readers', 'Your list, owned by you. Export it any time.', `<button class="btn btn-primary" onclick="ink.addReaderModal()">＋ Add</button><button class="btn" onclick="ink.importModal()">Import CSV</button><button class="btn" onclick="ink.exportCsv()">Export</button>`)}<div class="empty">Loading readers…</div>`;
   await loadSubs(); if (S.view !== 'readers') return;
   const a = S.author || {}; const joinUrl = a.slug ? `${PUBLIC()}/join/${a.slug}` : '';
-  const counts = { active: 0, pending: 0, unsubscribed: 0, bounced: 0, complained: 0 }; S.subs.forEach(s => counts[s.status] = (counts[s.status] || 0) + 1);
+  const counts = { active: 0, pending: 0, unsubscribed: 0, bounced: 0, complained: 0, archived: 0 }; S.subs.forEach(s => counts[s.status] = (counts[s.status] || 0) + 1);
   $('main').innerHTML = `${head('Readers', 'Your list, owned by you. Export it any time.', `<button class="btn btn-primary" onclick="ink.addReaderModal()">＋ Add</button><button class="btn" onclick="ink.importModal()">Import CSV</button><button class="btn" onclick="ink.exportCsv()">Export</button>`)}
-  <div class="tiles"><div class="tile"><div class="l">Active</div><div class="v cav">${counts.active.toLocaleString()}</div></div><div class="tile"><div class="l">Awaiting confirmation</div><div class="v">${counts.pending}</div></div><div class="tile"><div class="l">Unsubscribed</div><div class="v">${counts.unsubscribed}</div></div><div class="tile"><div class="l">Bounced / complained</div><div class="v">${counts.bounced + counts.complained}</div></div></div>
+  <div class="tiles"><div class="tile"><div class="l">Active</div><div class="v cav">${counts.active.toLocaleString()}</div></div><div class="tile"><div class="l">Awaiting confirmation</div><div class="v">${counts.pending}</div></div><div class="tile"><div class="l">Archived</div><div class="v">${counts.archived}</div></div><div class="tile"><div class="l">Unsubscribed</div><div class="v">${counts.unsubscribed}</div></div><div class="tile"><div class="l">Bounced / complained</div><div class="v">${counts.bounced + counts.complained}</div></div></div>
+  ${listHealthCard()}
   <div class="card"><div class="card-head"><span class="g">❧</span><h3>Grow the list</h3></div><div class="card-body">
     ${joinUrl ? `<div class="row"><div><label>Your sign-up page</label><div class="inline"><input type="text" readonly value="${esc(joinUrl)}" onclick="this.select()"><a class="btn btn-sm auto" href="${esc(joinUrl)}" target="_blank" rel="noopener">Open</a></div></div></div>
     <label>Embed a form on your site <span class="hint">(paste where the form should appear)</span></label><pre class="code" onclick="ink.selectAll(this)">&lt;div data-ink-join="${esc(a.slug)}" data-ink-tags="website" data-ink-button="Join the list"&gt;&lt;/div&gt;\n&lt;script src="${esc(PUBLIC())}/embed.js" async&gt;&lt;/script&gt;</pre>
     <div class="small dim">Add <code>?tags=kickstarter</code> to the sign-up link to tag readers by where they came from.</div>` : `<div class="empty">Set your sign-up address in <a href="#settings">Settings</a> to get a hosted join page and an embeddable form.</div>`}
   </div></div>
-  <div class="card"><div class="card-head"><h3>List</h3><div class="right"><input type="text" id="rd-q" placeholder="Search name or email" value="${esc(readersFilter.q)}" style="width:200px;padding:.35rem .6rem" oninput="ink.readersFilter()"><select id="rd-status" style="width:auto;padding:.35rem 2rem .35rem .6rem" onchange="ink.readersFilter()">${['active', 'pending', 'unsubscribed', 'bounced', 'complained', 'all'].map(s => `<option value="${s}" ${readersFilter.status === s ? 'selected' : ''}>${s}</option>`).join('')}</select><select id="rd-tag" style="width:auto;padding:.35rem 2rem .35rem .6rem" onchange="ink.readersFilter()"><option value="">any tag</option>${allTags().map(t => `<option ${readersFilter.tag === t ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select></div></div>
+  <div class="card"><div class="card-head"><h3>List</h3><div class="right"><input type="text" id="rd-q" placeholder="Search name or email" value="${esc(readersFilter.q)}" style="width:200px;padding:.35rem .6rem" oninput="ink.readersFilter()"><select id="rd-status" style="width:auto;padding:.35rem 2rem .35rem .6rem" onchange="ink.readersFilter()">${['active', 'pending', 'archived', 'unsubscribed', 'bounced', 'complained', 'all'].map(s => `<option value="${s}" ${readersFilter.status === s ? 'selected' : ''}>${s}</option>`).join('')}</select><select id="rd-tag" style="width:auto;padding:.35rem 2rem .35rem .6rem" onchange="ink.readersFilter()"><option value="">any tag</option>${allTags().map(t => `<option ${readersFilter.tag === t ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select></div></div>
   <div class="card-body tbl-wrap" id="rd-table"></div></div>`;
   ink.readersFilter();
 }
 ink.copy = async (el) => { const t = (el.dataset.v || el.textContent || '').trim(); if (!t) return; try { await navigator.clipboard.writeText(t); } catch { ink.selectAll(el); document.execCommand('copy'); } el.classList.add('copied'); setTimeout(() => el.classList.remove('copied'), 900); toast('Copied: ' + (t.length > 48 ? t.slice(0, 46) + '…' : t), 1600); };
+function listHealthCard() {
+  const cutoff = Date.now() - 120 * 864e5; let engaged = 0, quiet = 0, never = 0, revived = 0;
+  (S.subs || []).filter(x => x.status === 'active').forEach(x => { const last = [x.lastOpenAt, x.lastClickAt, x.reconfirmedAt].filter(Boolean).sort().pop(); if (x.reconfirmedAt) revived++; if (last && new Date(last).getTime() >= cutoff) engaged++; else if (last) quiet++; else never++; });
+  const total = engaged + quiet + never; if (!total) return '';
+  const cold = quiet + never; const share = Math.round(100 * cold / total);
+  const revivalActive = S.plans.some(p => p.status === 'active' && p.playbookId === 'revival');
+  const bar = (n, col) => `<i style="display:inline-block;height:100%;width:${100 * n / total}%;background:${col}"></i>`;
+  return `<div class="card"><div class="card-head"><span class="g">♨</span><h3>List temperature</h3><div class="right small dim">last 120 days</div></div><div class="card-body">
+    <div style="height:10px;border-radius:5px;overflow:hidden;background:var(--ink);white-space:nowrap;font-size:0">${bar(engaged, 'var(--moss)')}${bar(quiet, 'var(--brass)')}${bar(never, 'var(--ember)')}</div>
+    <div class="legend" style="margin-top:.5rem"><span><i style="background:var(--moss)"></i>Engaged ${engaged}</span><span><i style="background:var(--brass)"></i>Gone quiet ${quiet}</span><span><i style="background:var(--ember)"></i>Never engaged ${never}</span>${revived ? `<span>· ${revived} clicked "keep me"</span>` : ''}</div>
+    <p class="small muted" style="margin:.75rem 0 .5rem">${share >= 50 ? `<b style="color:var(--parch)">${share}% of your list is cold.</b> Sending to cold addresses drags down inbox placement for everyone else. The fix is a short revival: four honest letters with a one-click "keep me" button, then archive whoever never responds. You keep the readers worth keeping.` : share >= 25 ? `${share}% of your list has gone cold. Worth a revival plan before your next big send.` : `Healthy — ${100 - share}% of readers engaged recently.`}${(S.author?.lastSentAt && (Date.now() - new Date(S.author.lastSentAt)) / 864e5 < 14 && never > engaged) ? ' <i>(Opens from your latest letter are still arriving, so "never engaged" will shrink over the next few days.)</i>' : ''}</p>
+    <div class="actions">${revivalActive ? `<a class="btn btn-sm" href="#plan">Revival plan in progress</a>` : `<button class="btn btn-sm btn-primary" onclick="ink.newPlanModal('revival')">Start a revival plan</button>`}<button class="btn btn-sm" onclick="ink.pruneNow(null,null,null,this)" title="Archive readers with no engagement in 120 days — you confirm the count first">Archive cold readers now</button></div>
+  </div></div>`;
+}
 ink.selectAll = (el) => { const r = document.createRange(); r.selectNodeContents(el); const s = getSelection(); s.removeAllRanges(); s.addRange(r); };
 ink.readersFilter = () => {
   readersFilter = { q: ($('rd-q')?.value || '').toLowerCase(), status: $('rd-status')?.value || 'active', tag: $('rd-tag')?.value || '' };
@@ -834,10 +868,11 @@ ink.readerModal = (id) => {
   <div class="tiles" style="margin-top:1rem"><div class="tile"><div class="l">Opens</div><div class="v">${s.opens || 0}</div></div><div class="tile"><div class="l">Clicks</div><div class="v">${s.clicks || 0}</div></div><div class="tile"><div class="l">Last open</div><div class="v" style="font-size:1rem;padding-top:.5rem">${fmtDate(s.lastOpenAt)}</div></div></div>
   <label>Name</label><input type="text" id="rm-name" value="${esc(s.name || '')}"><label>Tags <span class="hint">(comma separated)</span></label><input type="text" id="rm-tags" value="${esc((s.tags || []).join(', '))}"><label>Notes</label><textarea id="rm-notes" rows="2">${esc(s.notes || '')}</textarea>
   ${s.bounceReason ? `<div class="msg msg-error visible">Bounce: ${esc(s.bounceReason)}</div>` : ''}
-  <div class="modal-actions">${s.status === 'active' ? `<button class="btn btn-danger" onclick="ink.setReaderStatus('${id}','unsubscribed')">Unsubscribe</button>` : (s.status === 'unsubscribed' || s.status === 'pending') ? `<button class="btn" onclick="ink.setReaderStatus('${id}','active')">Re-activate</button>` : ''}<button class="btn btn-danger btn-sm" onclick="ink.deleteReader('${id}')">Delete</button><button class="btn btn-ghost" onclick="ink.closeModal()">Cancel</button><button class="btn btn-primary" onclick="ink.saveReader('${id}')">Save</button></div>`);
+  ${s.status === 'archived' ? `<div class="msg msg-info visible">Archived ${fmtDate(s.archivedAt)} — ${esc(s.archivedReason || '')}. Not sent to; restore any time.</div>` : ''}
+  <div class="modal-actions">${s.status === 'active' ? `<button class="btn" onclick="ink.setReaderStatus('${id}','archived')" title="Stop sending without unsubscribing; can be restored">Archive</button><button class="btn btn-danger" onclick="ink.setReaderStatus('${id}','unsubscribed')">Unsubscribe</button>` : (s.status === 'unsubscribed' || s.status === 'pending' || s.status === 'archived') ? `<button class="btn" onclick="ink.setReaderStatus('${id}','active')">${s.status === 'archived' ? 'Restore' : 'Re-activate'}</button>` : ''}<button class="btn btn-danger btn-sm" onclick="ink.deleteReader('${id}')">Delete</button><button class="btn btn-ghost" onclick="ink.closeModal()">Cancel</button><button class="btn btn-primary" onclick="ink.saveReader('${id}')">Save</button></div>`);
 };
 ink.saveReader = async (id) => { const tags = $('rm-tags').value.split(',').map(t => t.trim()).filter(Boolean); await updateDoc(aDoc('subscribers', id), { name: $('rm-name').value.trim(), tags, notes: $('rm-notes').value.trim(), updatedAt: nowIso() }); closeModal(); await loadSubs(true); renderReaders(); };
-ink.setReaderStatus = async (id, status) => { const s = S.subs.find(x => x.id === id); const patch = { status, updatedAt: nowIso() }; if (status === 'unsubscribed') patch.unsubscribedAt = nowIso(); if (status === 'active') { patch.confirmedAt = nowIso(); patch.unsubscribedAt = null; } await updateDoc(aDoc('subscribers', id), patch); closeModal(); await api('/me/recount', {}); await loadSubs(true); renderReaders(); };
+ink.setReaderStatus = async (id, status) => { const s = S.subs.find(x => x.id === id); const patch = { status, updatedAt: nowIso() }; if (status === 'archived') { patch.archivedAt = nowIso(); patch.archivedReason = 'archived by you'; } if (status === 'unsubscribed') patch.unsubscribedAt = nowIso(); if (status === 'active') { patch.confirmedAt = nowIso(); patch.unsubscribedAt = null; } await updateDoc(aDoc('subscribers', id), patch); closeModal(); await api('/me/recount', {}); await loadSubs(true); renderReaders(); };
 ink.deleteReader = async (id) => { if (!(await confirmModal('Delete this reader?', 'Removes them and their history entirely (use Unsubscribe to keep a record).', 'Delete', true))) return; await deleteDoc(aDoc('subscribers', id)); closeModal(); await api('/me/recount', {}); await loadSubs(true); renderReaders(); };
 ink.addReaderModal = () => modal(`<h2>Add a reader</h2><label>Email</label><input type="email" id="ar-email"><label>Name</label><input type="text" id="ar-name"><label>Tags</label><input type="text" id="ar-tags" placeholder="e.g. kickstarter, arc"><div class="toggle-row" style="margin-top:.75rem"><div class="small">Send the welcome series to them</div><label class="toggle"><input type="checkbox" id="ar-welcome" checked><span class="s"></span></label></div><div class="msg msg-error" id="ar-err"></div><div class="modal-actions"><button class="btn btn-ghost" onclick="ink.closeModal()">Cancel</button><button class="btn btn-primary" onclick="ink.addReader(this)">Add</button></div>`);
 ink.addReader = async (btn) => {

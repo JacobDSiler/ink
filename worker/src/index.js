@@ -74,6 +74,7 @@ async function verifyToken(env, token) {
   } catch { return null; }
 }
 async function unsubToken(env, uid, sid) { return (await hmac(env.INK_SIGNING_SECRET, `unsub:${uid}:${sid}`)).slice(0, 24); }
+async function keepToken(env, uid, sid) { return (await hmac(env.INK_SIGNING_SECRET, `keep:${uid}:${sid}`)).slice(0, 24); }
 function unsubUrl(env, uid, sid, token, cid) { return `${env.PUBLIC_URL}/u/${uid}/${sid}/${token}${cid ? '?c=' + encodeURIComponent(cid) : ''}`; }
 
 function tzDate(iso, tz) {
@@ -341,6 +342,28 @@ async function countActive(db, uid) {
   return n;
 }
 
+/** Engagement breakdown of the list. quietDays: no open/click/keep in this many days. since: ISO cutoff for prune candidates. */
+async function listHealth(db, uid, quietDays = 120, since = null) {
+  const cutoff = since || addDays(nowIso(), -quietDays);
+  const out = { active: 0, engaged: 0, quiet: 0, never: 0, archived: 0, unsubscribed: 0, bounced: 0, pending: 0, revived: 0, pruneCandidates: [], cutoff };
+  let last = null;
+  for (let i = 0; i < 50; i++) {
+    const rows = await db.query(`authors/${uid}`, 'subscribers', { orderBy: [['__name__', 'asc']], limit: 1000, startAfter: last ? [{ referenceValue: last }] : undefined });
+    for (const r of rows) {
+      if (r.status === 'active') {
+        out.active++;
+        const lastAct = [r.lastOpenAt, r.lastClickAt, r.reconfirmedAt].filter(Boolean).sort().pop() || '';
+        const ever = !!lastAct;
+        if (r.reconfirmedAt) out.revived++;
+        if (lastAct >= cutoff) out.engaged++;
+        else { if (ever) out.quiet++; else out.never++; if ((r.createdAt || '') < cutoff) out.pruneCandidates.push(r.id); }
+      } else if (r.status in out) out[r.status]++;
+    }
+    if (rows.length < 1000) break; last = rows[rows.length - 1]._name;
+  }
+  return out;
+}
+
 async function addSubscriber(env, db, uid, author, { email, name, tags = [], source = 'join', fields = {} }) {
   email = String(email || '').trim().toLowerCase();
   if (!isEmail(email)) bad('Please enter a valid email address.');
@@ -384,6 +407,7 @@ async function startAutomations(db, uid, sid) {
 function buildVars(env, uid, author, sub, token, cid) {
   const firstBook = (author.books || [])[0] || {};
   return {
+    keep_url: sub.keepToken ? `${env.PUBLIC_URL}/keep/${uid}/${sub.id || sub.sid}/${sub.keepToken}${cid ? '?c=' + encodeURIComponent(cid) : ''}` : '#',
     name: sub.name || '', first_name: Render.firstName(sub.name) || '', fallback_name: author.readerNoun || 'friend',
     pen_name: author.penName || '', web_url: author.webUrl || '', book_title: firstBook.title || '', buy_url: author.buyUrl || firstBook.link || author.webUrl || '',
     unsubscribe_url: unsubUrl(env, uid, sub.id || sub.sid, token, cid)
@@ -411,7 +435,7 @@ function emailPayload(env, uid, author, sub, token, campaign, tags) {
 async function sendSingle(env, db, uid, author, sub, campaign, { kind = 'single', track = true } = {}) {
   const sid = sub.sid || sub.id || (await subscriberId(sub.email));
   const token = await unsubToken(env, uid, sid);
-  const payload = emailPayload(env, uid, author, { ...sub, id: sid }, token, campaign, [{ name: 'kind', value: kind }]);
+  const payload = emailPayload(env, uid, author, { ...sub, id: sid, keepToken: await keepToken(env, uid, sid) }, token, campaign, [{ name: 'kind', value: kind }]);
   let res;
   try { res = await resend(env, '/emails', payload); }
   catch (e) { if (/429|rate limit|quota|daily|limit/i.test(String(e.message))) throw new HttpError(429, 'The email provider\'s sending limit has been reached for today. Campaign sends pause and resume automatically; test emails will work again when the limit resets (or after upgrading the Resend plan).'); throw e; }
@@ -515,6 +539,7 @@ async function runSendJob(env, db, uid, cid, maxBatches = 8) {
         const payloads = [];
         for (const s of batch) {
           const token = await unsubToken(env, uid, s.id);
+          s.keepToken = await keepToken(env, uid, s.id);
           payloads.push(emailPayload(env, uid, author, s, token, { ...campaign, trackId: cid }, [{ name: 'campaign', value: cid }]));
         }
         let rids = [];
@@ -708,6 +733,17 @@ async function nudgeAuthor(env, db, author) {
       if (!it.dueDate || ['sent', 'skipped'].includes(it.status)) continue;
       const dueMs = new Date(it.dueDate + 'T12:00:00Z').getTime();
       const daysUntil = (dueMs - Date.now()) / 864e5;
+      if (it.action === 'prune') {
+        if (it.status === 'upcoming' && daysUntil <= 0) {
+          try {
+            const h = await listHealth(db, uid, 0, new Date(plan.anchorDate + 'T00:00:00Z').toISOString());
+            it.status = 'drafted'; changed = true;
+            await db.set(`authors/${uid}/suggestions/prune_${plan.id}_${it.id}`, { type: 'prune', title: `Archive ${h.pruneCandidates.length} readers who never responded`, body: `Your ${plan.name} plan has run its course. ${h.pruneCandidates.length} readers neither opened, clicked, nor said "keep me" since it began${h.revived ? `; ${h.revived} clicked to stay` : ''}. Archiving them stops your sender reputation paying for dead addresses — they are kept on file and can be restored any time.`, planId: plan.id, itemId: it.id, since: new Date(plan.anchorDate + 'T00:00:00Z').toISOString(), count: h.pruneCandidates.length, status: 'open', createdAt: t });
+            drafted.push({ it, cid: null, plan, prune: true, count: h.pruneCandidates.length });
+          } catch (e) { console.error('prune suggest', uid, e.message); }
+        }
+        continue;
+      }
       if (it.status === 'upcoming' && daysUntil <= leadDays) {
         // auto-draft
         try {
@@ -735,6 +771,7 @@ async function nudgeAuthor(env, db, author) {
   }
   const paragraphs = [], actions = [];
   for (const d of drafted) {
+    if (d.prune) { paragraphs.push(`Your **${d.plan.name}** plan has finished. **${d.count} readers** never opened, clicked, or said "keep me". I recommend archiving them — it is waiting for your approval in Ink, and nothing happens until you say so.`); actions.push({ label: 'Review in Approvals', url: `${env.APP_URL}/#approvals` }); continue; }
     paragraphs.push(`**${d.it.title}** is due ${tzDate(d.it.dueDate + 'T12:00:00Z', tz)}. I have written a draft from your ${d.plan.name} plan — it needs your eyes before it goes anywhere.`);
     actions.push({ label: `Review "${d.it.title}" in Ink`, url: `${env.APP_URL}/#campaign/${d.cid}` });
     actions.push({ label: `Approve as-is & schedule for ${d.it.dueDate}`, url: await approveLink(env, uid, d.cid, 'schedule') });
@@ -747,7 +784,7 @@ async function nudgeAuthor(env, db, author) {
     paragraphs.push(`**${d.it.title}** was due ${tzDate(d.it.dueDate + 'T12:00:00Z', tz)} and has not gone out. No guilt — lists forgive a late letter far more than a silent one. Send it when you can, or skip it in your plan.`);
     actions.push({ label: `Open the plan`, url: `${env.APP_URL}/#plan/${d.plan.id}` });
   }
-  if (paragraphs.length) await emailAuthor(env, author, drafted.length ? `Ink drafted your next letter — approve?` : `Your list is waiting on you`, paragraphs, actions);
+  if (paragraphs.length) await emailAuthor(env, author, drafted.some(d => d.prune) && drafted.length === 1 ? `Your list revival is done — approve the clean-up?` : drafted.length ? `Ink drafted your next letter — approve?` : `Your list is waiting on you`, paragraphs, actions);
 
   // quiet-list reminder (weekly at most) when no plan is active and nothing sent for 5 weeks
   if (!plans.length) {
@@ -912,6 +949,22 @@ async function route(request, env, ctx) {
     return html(pageShell('Unsubscribe', `<div class="pen">${escapeHtml(author.penName || '')}</div><h1>Unsubscribe?</h1><p>Stop receiving letters from ${escapeHtml(author.penName || 'this author')} at <strong>${escapeHtml(sub.email)}</strong>.</p><form method="POST"><button type="submit">Yes, unsubscribe me</button></form>`, author.brand));
   }
 
+  if (parts[0] === 'keep' && parts[3]) {
+    const [, uid, sid, token] = parts;
+    const expect = await keepToken(env, uid, sid);
+    if (!timingSafeEqual(token, expect)) return html(pageShell('Invalid link', '<h1>Invalid link</h1><p>This link is not valid.</p>'), 400);
+    const author = await db.get(`authors/${uid}`); const sub = await db.get(`authors/${uid}/subscribers/${sid}`);
+    if (!author || !sub) return html(pageShell('Not found', '<h1>Not found</h1><p>That address is not on the list.</p>'), 404);
+    const t = nowIso();
+    const patch = { reconfirmedAt: t, lastClickAt: t, updatedAt: t, tags: Array.from(new Set([...(sub.tags || []), 'revived'])) };
+    if (sub.status === 'archived' || sub.status === 'unsubscribed' || sub.status === 'pending') { patch.status = 'active'; patch.unsubscribedAt = null; patch.confirmedAt = sub.confirmedAt || t; await db.increment(`authors/${uid}`, { subscriberCount: 1 }); }
+    await db.set(`authors/${uid}/subscribers/${sid}`, patch);
+    const cid = url.searchParams.get('c');
+    if (cid) await db.increment(`authors/${uid}/campaigns/${cid}`, { 'stats.kept': 1 });
+    await db.increment(`authors/${uid}/metricsDaily/${t.slice(0, 10)}`, { kept: 1 });
+    return html(pageShell('You are staying', `<div class="pen">${escapeHtml(author.penName || '')}</div><h1>Glad you are staying.</h1><p>${escapeHtml(author.penName || 'The author')} will keep writing to <strong>${escapeHtml(sub.email)}</strong>. Thank you for saying so — it means more than you would think.</p>${author.webUrl ? `<p><a href="${escapeHtml(author.webUrl)}">Back to ${escapeHtml(author.penName)}'s site →</a></p>` : ''}`, author.brand));
+  }
+
   if (parts[0] === 'approve' && parts[1]) {
     const p = await verifyToken(env, parts[1]);
     if (!p || p.k !== 'approve') return html(pageShell('Link expired', '<h1>This approval link has expired</h1><p>Open Ink to approve the campaign there.</p>'), 400);
@@ -1044,6 +1097,21 @@ async function route(request, env, ctx) {
     if (action === 'job' && m === 'GET') return json({ ok: true, job: await db.get(`jobs/${uid}_${cid}`) });
     if (action === 'report' && m === 'POST') { await campaignReport(env, db, uid, cid); return json({ ok: true }); }
     bad('Unknown campaign action');
+  }
+
+  if (path === '/list/health' && m === 'GET') return json({ ok: true, ...(await listHealth(db, uid, Number(url.searchParams.get('quietDays') || 120))) });
+  if (path === '/list/prune' && m === 'POST') {
+    // Archive active readers with no open/click/keep since `since` (ISO) who joined before it. dryRun → count only.
+    const since = body.since || addDays(nowIso(), -120);
+    const h = await listHealth(db, uid, 0, since);
+    if (body.dryRun) return json({ ok: true, count: h.pruneCandidates.length, since });
+    const t = nowIso(); const writes = h.pruneCandidates.map(id => db.writeSet(`authors/${uid}/subscribers/${id}`, { status: 'archived', archivedAt: t, archivedReason: 'no engagement since ' + since.slice(0, 10), updatedAt: t }));
+    await db.commitChunked(writes);
+    const n = await countActive(db, uid);
+    await db.set(`authors/${uid}`, { subscriberCount: n, lastPrunedAt: t, updatedAt: t });
+    if (writes.length) await db.increment(`authors/${uid}/metricsDaily/${t.slice(0, 10)}`, { archived: writes.length });
+    if (body.planId && body.itemId) await markPlanItem(db, uid, body.planId, body.itemId, { status: 'sent', sentAt: t, archivedCount: writes.length });
+    return json({ ok: true, archived: writes.length, subscriberCount: n });
   }
 
   if (path === '/deliverability' && m === 'GET') {
