@@ -3,15 +3,14 @@ main = "src/index.js"
 compatibility_date = "2025-06-01"
 workers_dev = true
 
-# Reader-facing custom domain (join pages, unsubscribe + approve links, embed.js).
-# wrangler creates the DNS record in the jacobsiler.com zone on deploy.
-# IMPORTANT: keep this a direct child of jacobsiler.com. The zone serves its sites through a
-# wildcard record, and a custom domain nested under a site hostname (e.g. go.ink.jacobsiler.com)
-# turns that hostname into an "empty non-terminal" that the wildcard no longer matches —
-# which took ink.jacobsiler.com offline on 2026-09-04.
-# To stay on workers.dev instead: delete this block and set PUBLIC_URL below to the workers.dev URL.
+# Reader-facing address (join pages, unsubscribe + approve links, embed.js).
+# This is a Worker ROUTE, not a custom domain: it never creates or edits DNS. It only needs
+# go.jacobsiler.com to exist as a proxied (orange-cloud) record in the zone, which it does.
+# History: a custom domain nested under a site hostname (go.ink.jacobsiler.com) made
+# ink.jacobsiler.com an "empty non-terminal" and took the site offline on 2026-09-04, and a
+# custom domain at go.jacobsiler.com then collided with the leftover record. Routes avoid both.
 routes = [
-  { pattern = "go.jacobsiler.com", custom_domain = true }
+  { pattern = "go.jacobsiler.com/*", zone_name = "jacobsiler.com" }
 ]
 
 # Runs every 5 minutes: scheduled sends, welcome sequences, nudges, 48h reports.

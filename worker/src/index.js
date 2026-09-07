@@ -951,8 +951,10 @@ async function route(request, env, ctx) {
     await resend(env, `/domains/${d.resendId}/verify`, null, 'POST').catch(() => { });
     const r = await resend(env, `/domains/${d.resendId}`, null, 'GET');
     const status = r.status === 'verified' ? 'verified' : (r.status || 'pending');
-    await db.set(`authors/${uid}`, { customDomain: { ...d, status, checkedAt: nowIso() }, updatedAt: nowIso() });
-    return json({ ok: true, status, records: r.records || d.records });
+    const patch = { ...d, status, checkedAt: nowIso(), records: r.records && r.records.length ? r.records.map(x => ({ type: x.type, name: x.name, value: x.value, priority: x.priority || null, status: x.status || null })) : d.records };
+    if (status === 'verified' && !d.verifiedAt) patch.verifiedAt = nowIso();
+    await db.set(`authors/${uid}`, { customDomain: patch, updatedAt: nowIso() });
+    return json({ ok: true, status, records: patch.records });
   }
   if (path === '/domain' && m === 'DELETE') {
     const d = author.customDomain; if (d && d.resendId) await resend(env, `/domains/${d.resendId}`, null, 'DELETE').catch(() => { });
@@ -1014,6 +1016,41 @@ async function runCron(env, ctx) {
       else await db.delete(`automationRuns/${r.id}`);
     } catch (e) { console.error('automation', r.id, e.message); await db.set(`automationRuns/${r.id}`, { nextAt: addDays(nowIso(), 0.05), lastError: e.message }); }
   }
+  // 3b. pending custom sending domains: poll Resend, email the author when verified
+  try {
+    const pend = await db.query(null, 'authors', { where: [['customDomain.status', '==', 'pending']], limit: 10 });
+    for (const a of pend) {
+      const d = a.customDomain || {}; if (!d.resendId) continue;
+      const lastCheck = d.checkedAt ? new Date(d.checkedAt).getTime() : 0;
+      if (Date.now() - lastCheck < 10 * 60e3) continue; // every ~10 minutes per author
+      try {
+        await resend(env, `/domains/${d.resendId}/verify`, null, 'POST').catch(() => { });
+        const r = await resend(env, `/domains/${d.resendId}`, null, 'GET');
+        const status = r.status === 'verified' ? 'verified' : (r.status || 'pending');
+        const patch = { ...d, status, checkedAt: t, records: r.records && r.records.length ? r.records.map(x => ({ type: x.type, name: x.name, value: x.value, priority: x.priority || null, status: x.status || null })) : d.records };
+        if (status === 'verified') {
+          patch.verifiedAt = t;
+          await db.set(`authors/${a.id}`, { customDomain: patch, updatedAt: t });
+          const local = (a.fromLocal || a.slug || 'author').toLowerCase();
+          await emailAuthor(env, { ...a, id: a.id, email: a.replyTo || a.email }, `${d.domain} is verified — you now send from your own domain`,
+            [`Your DNS records checked out. From now on your letters go out as **${a.fromName || a.penName || 'you'} <${local}@${d.domain}>**, which is the best thing you can do for deliverability and for readers recognising you in the inbox.`,
+             `Nothing else to change — Ink switched over automatically. Send yourself a test from any draft to see it.`],
+            [{ label: 'Open Ink settings', url: `${env.APP_URL}/#settings` }]);
+        } else {
+          // gentle nudge once if still pending after 3 days
+          const created = d.createdAt ? new Date(d.createdAt).getTime() : Date.now();
+          if (!d.remindedPending && Date.now() - created > 3 * 864e5) {
+            patch.remindedPending = true;
+            await emailAuthor(env, { ...a, id: a.id, email: a.replyTo || a.email }, `${d.domain} still isn't verified`,
+              [`It has been three days and Resend still can't see the DNS records for **${d.domain}**. Usually one record was entered with a typo or with the domain name added twice (e.g. "resend._domainkey.${d.domain}.${d.domain}").`,
+               `Until it verifies, Ink keeps sending from its shared domain with your name and reply-to, so nothing is blocked — this is only about polish.`],
+              [{ label: 'Check the records in Ink', url: `${env.APP_URL}/#settings` }]);
+          }
+          await db.set(`authors/${a.id}`, { customDomain: patch, updatedAt: t });
+        }
+      } catch (e) { console.error('domain check', a.id, e.message); await db.set(`authors/${a.id}`, { customDomain: { ...d, checkedAt: t, lastError: String(e.message).slice(0, 200) } }); }
+    }
+  } catch (e) { console.error('domain poll', e.message); }
   // 4. daily nudges per author
   const authors = await db.query(null, 'authors', { where: [['nudgeNextAt', '<=', t]], limit: 10 });
   for (const a of authors) {

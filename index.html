@@ -213,6 +213,7 @@
   .tpl-card .cat { font-size:.68rem; letter-spacing:.12em; text-transform:uppercase; color:var(--cav); }
   .tpl-card .n { font-family:var(--serif); font-size:1.2rem; color:var(--brass-light); }
   .tpl-card .p { font-size:.88rem; color:var(--parch-dark); flex:1; }
+  td.copy { cursor:pointer; transition:background .15s; } td.copy:hover { background:rgba(184,134,11,.08); } td.copy.copied { background:rgba(111,163,107,.25); }
   .health { height:6px; background:var(--ink-line); border-radius:3px; overflow:hidden; margin-top:.4rem; }
   .health i { display:block; height:100%; background:var(--moss); border-radius:3px; }
   .sugg { border-left:3px solid var(--cav); padding-left:.9rem; }
@@ -804,6 +805,7 @@ async function renderReaders() {
   <div class="card-body tbl-wrap" id="rd-table"></div></div>`;
   ink.readersFilter();
 }
+ink.copy = async (el) => { const t = (el.dataset.v || el.textContent || '').trim(); if (!t) return; try { await navigator.clipboard.writeText(t); } catch { ink.selectAll(el); document.execCommand('copy'); } el.classList.add('copied'); setTimeout(() => el.classList.remove('copied'), 900); toast('Copied: ' + (t.length > 48 ? t.slice(0, 46) + '…' : t), 1600); };
 ink.selectAll = (el) => { const r = document.createRange(); r.selectNodeContents(el); const s = getSelection(); s.removeAllRanges(); s.addRange(r); };
 ink.readersFilter = () => {
   readersFilter = { q: ($('rd-q')?.value || '').toLowerCase(), status: $('rd-status')?.value || 'active', tag: $('rd-tag')?.value || '' };
@@ -940,7 +942,7 @@ function renderSettings() {
       <label>Reader noun <span class="hint">(used when a reader has no name: "Hello friend")</span></label><input type="text" id="st-noun" value="${esc(a.readerNoun || 'friend')}">
     </div></div>
     <div class="card"><div class="card-head"><span class="g">⚑</span><h3>Your own sending domain <span class="dim small">(optional)</span></h3></div><div class="card-body">
-      ${cd ? `<div><b>${esc(cd.domain)}</b> — <span class="status ${cd.status === 'verified' ? 'active' : 'pending'}">${cd.status}</span></div>${cd.status !== 'verified' ? `<p class="small muted" style="margin-top:.5rem">Add these DNS records at your registrar, then verify:</p><div class="tbl-wrap"><table><thead><tr><th>Type</th><th>Name</th><th>Value</th></tr></thead><tbody>${(cd.records || []).map(r => `<tr><td>${esc(r.type)}</td><td class="code" style="font-size:.75rem">${esc(r.name)}</td><td class="code" style="font-size:.75rem;word-break:break-all">${esc(r.value)}</td></tr>`).join('')}</tbody></table></div>` : ''}<div class="actions" style="margin-top:.75rem"><button class="btn btn-sm" onclick="ink.verifyDomain(this)">Check verification</button><button class="btn btn-sm btn-danger" onclick="ink.removeDomain(this)">Remove</button></div>` :
+      ${cd ? `<div><b>${esc(cd.domain)}</b> — <span class="status ${cd.status === 'verified' ? 'active' : 'pending'}">${cd.status}</span>${cd.status === 'verified' ? ` <span class="small dim">since ${fmtDate(cd.verifiedAt)}</span>` : cd.checkedAt ? ` <span class="small dim">last checked ${fmtDateTime(cd.checkedAt)}</span>` : ''}</div>${cd.status !== 'verified' ? `<p class="small muted" style="margin-top:.5rem">Add these DNS records at your registrar — click any value to copy it. Ink checks every few minutes and will email you the moment the domain verifies (DNS can take up to an hour).</p><div class="tbl-wrap"><table><thead><tr><th>Type</th><th>Name</th><th>Value</th>${(cd.records || []).some(r => r.priority) ? '<th>Priority</th>' : ''}</tr></thead><tbody>${(cd.records || []).map(r => `<tr><td class="copy" onclick="ink.copy(this)" title="Click to copy">${esc(r.type)}</td><td class="code copy" style="font-size:.75rem" onclick="ink.copy(this)" title="Click to copy">${esc(r.name)}</td><td class="code copy" style="font-size:.75rem;word-break:break-all" onclick="ink.copy(this)" title="Click to copy">${esc(r.value)}</td>${(cd.records || []).some(x => x.priority) ? `<td class="copy" onclick="ink.copy(this)" title="Click to copy">${r.priority || ''}</td>` : ''}</tr>`).join('')}</tbody></table></div>` : ''}<div class="actions" style="margin-top:.75rem"><button class="btn btn-sm" onclick="ink.verifyDomain(this)">Check verification</button><button class="btn btn-sm btn-danger" onclick="ink.removeDomain(this)">Remove</button></div>` :
       `<p class="small muted">Send from your own domain (e.g. <code>news.yourname.com</code>) for the best deliverability and brand. Until it is verified, Ink sends from its shared domain with your name and reply-to.</p><div class="row"><div><input type="text" id="st-domain" placeholder="news.yourdomain.com"></div><div class="auto"><button class="btn" onclick="ink.addDomain(this)">Set up</button></div></div>`}
       <div class="msg msg-error" id="st-dom-err"></div>
     </div></div>
