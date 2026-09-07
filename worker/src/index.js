@@ -416,10 +416,29 @@ async function sendSingle(env, db, uid, author, sub, campaign, { kind = 'single'
   try { res = await resend(env, '/emails', payload); }
   catch (e) { if (/429|rate limit|quota|daily|limit/i.test(String(e.message))) throw new HttpError(429, 'The email provider\'s sending limit has been reached for today. Campaign sends pause and resume automatically; test emails will work again when the limit resets (or after upgrading the Resend plan).'); throw e; }
   if (track && res && res.id) await db.set(`emailIndex/${res.id}`, { uid, sid, kind, cid: campaign.id || null, at: nowIso() });
+  await countSent(db, env, 1);
   return res;
 }
 
 /** Create/continue a campaign send job. Returns job state. */
+// Platform-wide daily sending budget (DAILY_SEND_CAP in wrangler.toml; 0 = unlimited).
+// The provider's limit is per account, so this is shared by every author on the instance.
+const todayUtc = () => new Date().toISOString().slice(0, 10);
+const nextUtcDay = () => new Date(Math.ceil(Date.now() / 864e5) * 864e5 + 5 * 60e3).toISOString();
+async function dailyQuota(db, env) {
+  const cap = Number(env.DAILY_SEND_CAP || 0);
+  if (!cap) return { cap: 0, sentToday: 0, remaining: Infinity };
+  const m = (await db.get('meta/sending')) || {};
+  const sentToday = m.day === todayUtc() ? (m.sent || 0) : 0;
+  return { cap, sentToday, remaining: Math.max(0, cap - sentToday) };
+}
+async function countSent(db, env, n) {
+  if (!Number(env.DAILY_SEND_CAP || 0) || !n) return;
+  const m = (await db.get('meta/sending')) || {};
+  if (m.day !== todayUtc()) await db.set('meta/sending', { day: todayUtc(), sent: n }, false);
+  else await db.increment('meta/sending', { sent: n });
+}
+
 // Engagement score: most recently engaged readers first. Sending to people who open builds
 // domain reputation early in the send, which is what mailbox providers watch.
 function engagementScore(s) {
@@ -468,13 +487,22 @@ async function runSendJob(env, db, uid, cid, maxBatches = 8) {
 
   let sentThisRun = 0;
   const limit = job.pace || paceLimit(author);
+  let quota = await dailyQuota(db, env);
   for (let b = 0; b < maxBatches && sentThisRun < limit; b++) {
+    if (quota.remaining <= 0) {
+      // Daily budget spent: pause until the next UTC day (+5 min) and say so on the campaign.
+      const until = nextUtcDay();
+      job.pausedUntil = until;
+      await db.set(jobPath, { pausedUntil: until, updatedAt: nowIso() });
+      await db.set(`authors/${uid}/campaigns/${cid}`, { sendPausedUntil: until, sendPauseReason: `Today's sending budget (${quota.cap} emails a day on the current plan) is used up. Ink continues automatically tomorrow, most engaged readers first.`, updatedAt: nowIso() });
+      return job;
+    }
     // next up to 100 ids from the queue
     const qStart = { qi: job.qi, qo: job.qo };
     let chunk = null, ids = [];
     while (ids.length < 100 && job.qi < job.chunks) {
       if (!chunk || chunk._i !== job.qi) { chunk = await db.get(`jobs/${uid}_${cid}/q/${job.qi}`); if (!chunk) { job.qi++; job.qo = 0; continue; } chunk._i = job.qi; }
-      const take = Math.min(100 - ids.length, limit - sentThisRun - ids.length, chunk.ids.length - job.qo);
+      const take = Math.min(100 - ids.length, limit - sentThisRun - ids.length, quota.remaining - ids.length, chunk.ids.length - job.qo);
       if (take <= 0) break;
       ids = ids.concat(chunk.ids.slice(job.qo, job.qo + take)); job.qo += take;
       if (job.qo >= chunk.ids.length) { job.qi++; job.qo = 0; }
@@ -517,6 +545,7 @@ async function runSendJob(env, db, uid, cid, maxBatches = 8) {
         await db.commitChunked(writes);
         const ok = rids.filter(Boolean).length;
         job.sent += ok; job.failed += batch.length - ok; job.batches += 1; sentThisRun += batch.length;
+        await countSent(db, env, ok); quota.remaining -= ok; quota.sentToday += ok;
         await db.increment(`authors/${uid}/campaigns/${cid}`, { 'stats.sent': ok });
       }
       await db.set(jobPath, { sent: job.sent, failed: job.failed, batches: job.batches, qi: job.qi, qo: job.qo, pausedUntil: null, updatedAt: nowIso() });
@@ -540,6 +569,9 @@ async function finishJob(env, db, uid, cid, job, campaign, author) {
   const dels = []; for (let i = 0; i < (job.chunks || 0); i++) dels.push(db.writeDelete(`jobs/${uid}_${cid}/q/${i}`));
   if (dels.length) await db.commitChunked(dels);
   if (campaign.planId && campaign.planItemId) await markPlanItem(db, uid, campaign.planId, campaign.planItemId, { status: 'sent', sentAt: doneAt });
+  // a sent letter resolves any approval reminder that pointed at it
+  const open = await db.query(`authors/${uid}`, 'suggestions', { where: [['campaignId', '==', cid]], limit: 5 });
+  for (const sg of open) if (sg.status === 'open') await db.set(`authors/${uid}/suggestions/${sg.id}`, { status: 'approved', resolvedAt: doneAt });
 }
 
 async function markPlanItem(db, uid, planId, itemId, patch) {
@@ -913,7 +945,7 @@ async function route(request, env, ctx) {
   author.accountEmail = user.email;
   const body = m === 'POST' || m === 'PUT' ? await readBody(request) : {};
 
-  if (path === '/me' && m === 'GET') return json({ ok: true, user, author, publicUrl: env.PUBLIC_URL, fromAddress: fromAddress(env, author), fromDomain: env.INK_FROM_DOMAIN });
+  if (path === '/me' && m === 'GET') { const q = await dailyQuota(db, env); return json({ ok: true, user, author, publicUrl: env.PUBLIC_URL, fromAddress: fromAddress(env, author), fromDomain: env.INK_FROM_DOMAIN, dailyCap: q.cap, sentToday: q.sentToday, remainingToday: q.cap ? q.remaining : null }); }
 
   if (path === '/me/slug' && m === 'POST') {
     const slug = String(body.slug || '').toLowerCase().trim().replace(/[^a-z0-9-]/g, '');
@@ -1030,7 +1062,7 @@ async function route(request, env, ctx) {
       spf: spf.some(x => /v=spf1/i.test(x)) && mx.length > 0, dkim: dkim.some(x => /p=/.test(x)), dmarc: !!dmarc, dmarcPolicy: policy, dmarcRecord: { name: `_dmarc.${domain}`, value: `v=DMARC1; p=none; rua=mailto:${author.replyTo || author.email || ''}` },
       postalAddress: !!author.postalAddress, replyTo: !!(author.replyTo || author.email), unsubscribe: true, plainText: true,
       bounceRate: tot.sent ? tot.bounced / tot.sent : 0, complaintRate: tot.sent ? tot.complained / tot.sent : 0, openRate: tot.sent ? tot.opens / tot.sent : null,
-      totalSent: total, stage, pacePerHour: paceLimit(author) * 12, doubleOptIn: !!author.doubleOptIn
+      totalSent: total, stage, pacePerHour: paceLimit(author) * 12, doubleOptIn: !!author.doubleOptIn, dailyCap: (await dailyQuota(db, env)).cap
     } });
   }
 

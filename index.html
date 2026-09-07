@@ -529,9 +529,18 @@ function renderDashboard() {
 function growth30() { if (!S.metrics.length) return 'active readers'; const cut = dateStr(Date.now() - 30 * 864e5); const m = S.metrics.filter(d => d.id >= cut); const s = m.reduce((x, d) => x + (d.subscribed || 0), 0), u = m.reduce((x, d) => x + (d.unsubscribed || 0), 0); return `+${s} / −${u} in 30 days`; }
 async function loadMetrics() { if (S.metrics.length) return; const snap = await getDocs(query(aCol('metricsDaily'), orderBy('__name__', 'desc'), limit(180))); S.metrics = snap.docs.map(d => ({ id: d.id, ...d.data() })).reverse(); }
 function suggHtml(s) {
-  return `<div class="list-item sugg ${s.type}"><div class="main"><div class="title">${esc(s.title)}</div><div class="sub">${esc(s.body || '')}</div></div><div class="actions">${s.campaignId ? `<a class="btn btn-sm btn-primary" href="#campaign/${s.campaignId}">Review</a>` : ''}${s.actionType === 'send-reengage' ? `<a class="btn btn-sm btn-primary" href="#compose/re-engage">Draft it</a>` : ''}${s.actionType === 'add-plan' ? `<a class="btn btn-sm btn-primary" href="#plan">Plan</a>` : ''}<button class="btn btn-sm btn-ghost" onclick="ink.dismissSugg('${s.id}')">Dismiss</button></div></div>`;
+  const c = s.campaignId ? S.campaigns.find(x => x.id === s.campaignId) : null;
+  const primary = s.type === 'draft' && c && !['sent', 'sending', 'scheduled'].includes(c.status) ? `<a class="btn btn-sm btn-primary" href="#campaign/${s.campaignId}" title="Open the draft — approve it there with 'Approve & schedule' or 'Approve & send now'">Review & approve</a>`
+    : s.campaignId ? `<a class="btn btn-sm" href="#campaign/${s.campaignId}">Open</a>`
+    : s.actionType === 'send-reengage' ? `<a class="btn btn-sm btn-primary" href="#compose/re-engage">Draft it</a>`
+    : s.actionType === 'add-plan' ? `<a class="btn btn-sm btn-primary" href="#plan">Start a plan</a>`
+    : s.actionType === 'adjust-subject' ? `<a class="btn btn-sm btn-primary" href="#compose">Write with this in mind</a>` : '';
+  const done = s.type === 'draft' ? '' : `<button class="btn btn-sm" onclick="ink.resolveSugg('${s.id}','done')" title="Mark as read / acted on">Done</button>`;
+  return `<div class="list-item sugg ${s.type}"><div class="main"><div class="title">${esc(s.title)}</div><div class="sub">${esc(s.body || '')}</div>${s.type === 'draft' ? `<div class="small dim" style="margin-top:.2rem">A draft is approved from inside the letter (Approve & schedule / Approve & send now). Dismiss only removes this reminder; the draft stays in Letters.</div>` : ''}</div><div class="actions">${primary}${done}<button class="btn btn-sm btn-ghost" onclick="ink.resolveSugg('${s.id}','dismissed')">Dismiss</button></div></div>`;
 }
-ink.dismissSugg = async (id) => { await updateDoc(aDoc('suggestions', id), { status: 'dismissed', resolvedAt: nowIso() }); };
+ink.resolveSugg = async (id, status) => { await updateDoc(aDoc('suggestions', id), { status, resolvedAt: nowIso() }); };
+ink.dismissSugg = (id) => ink.resolveSugg(id, 'dismissed');
+ink.clearSuggestions = async () => { if (!S.suggestions.length) return; if (!(await confirmModal('Clear all?', `Marks all ${S.suggestions.length} items as dismissed. Drafts stay in Letters; nothing is deleted or sent.`, 'Clear all'))) return; const b = writeBatch(db); S.suggestions.forEach(x => b.update(aDoc('suggestions', x.id), { status: 'dismissed', resolvedAt: nowIso() })); await b.commit(); toast('Cleared.'); };
 ink.runInsights = async (btn) => { busy(btn, true, 'Analysing'); try { const r = await api('/ai/insights', {}); toast('Insights added to your approvals.'); location.hash = '#approvals'; } catch (e) { toast(e.message, 5000); } finally { busy(btn, false); } };
 
 /* ── charts (single hue for growth; two validated hues for rates) ── */
@@ -560,7 +569,7 @@ ink.chartLeave = () => { $('tooltip').style.display = 'none'; document.querySele
 
 /* ═══════════════════════════ APPROVALS ═══════════════════════════ */
 function renderApprovals() {
-  $('main').innerHTML = `${head('Approvals', 'Everything Ink has drafted, noticed, or suggested. Nothing here is sent until you say so.', `<button class="btn" onclick="ink.runInsights(this)">Ask Ink for insights</button>`)}
+  $('main').innerHTML = `${head('Approvals', 'Everything Ink has drafted, noticed, or suggested. Nothing here is sent until you say so.', `<button class="btn" onclick="ink.runInsights(this)">Ask Ink for insights</button>${S.suggestions.length ? `<button class="btn btn-ghost" onclick="ink.clearSuggestions()">Clear all</button>` : ''}`)}
   <div class="card"><div class="card-body">${S.suggestions.length ? S.suggestions.map(suggHtml).join('') : '<div class="empty">All clear. Ink will drop drafts and observations here as your plan comes due.</div>'}</div></div>`;
 }
 
@@ -695,8 +704,10 @@ ink.sendNow = async (id, btn) => {
   if (!v.subject || !v.body) return showMsg('ed-err', 'Subject and body are needed.');
   if (/\[[^\]]{3,}\]/.test(v.body + v.subject) && !(await confirmModal('Placeholders remain', 'The text still contains [square-bracket placeholders]. Send anyway?', 'Send anyway', true))) return;
   const n = await segmentCount(c);
-  if (!(await confirmModal('Send now?', `<b>"${esc(v.subject)}"</b> will go to <b>${n.toLocaleString()} readers</b> right now. This cannot be undone.`, `Yes, send to ${n}`))) return;
-  busy(btn, true, 'Sending'); try { const r = await api(`/campaigns/${id}/send`, { confirm: 'SEND' }); toast(r.paused ? `Started, then paused: your email provider's daily limit was reached. Ink resumes automatically ${fmtDateTime(r.pausedUntil)}.` : 'On its way.', r.paused ? 8000 : 2600); editorState.id = null; } catch (e) { showMsg('ed-err', e.message); } finally { busy(btn, false); }
+  const cap = S.me && S.me.dailyCap, rem = S.me && S.me.remainingToday;
+  const capNote = cap && n > rem ? `<br><br>Your plan allows <b>${cap} emails a day</b> (${rem} left today). The first ${rem} go now, most engaged readers first; Ink sends the rest automatically over the next ${Math.ceil((n - rem) / cap)} day${Math.ceil((n - rem) / cap) > 1 ? 's' : ''}. Nobody gets it twice.` : '';
+  if (!(await confirmModal('Send now?', `<b>"${esc(v.subject)}"</b> will go to <b>${n.toLocaleString()} readers</b> right now. This cannot be undone.${capNote}`, `Yes, send to ${n}`))) return;
+  busy(btn, true, 'Sending'); try { const r = await api(`/campaigns/${id}/send`, { confirm: 'SEND' }); S.suggestions.filter(x => x.campaignId === id).forEach(x => updateDoc(aDoc('suggestions', x.id), { status: 'approved', resolvedAt: nowIso() })); toast(r.paused ? `Started, then paused: your email provider's daily limit was reached. Ink resumes automatically ${fmtDateTime(r.pausedUntil)}.` : 'On its way.', r.paused ? 8000 : 2600); editorState.id = null; } catch (e) { showMsg('ed-err', e.message); } finally { busy(btn, false); }
 };
 ink.schedule = async (id, btn) => {
   await saveEditor(id); hideMsg('ed-err'); const v = editorValues(); const d = $('ed-date').value, t = $('ed-time').value || '09:00';
@@ -973,6 +984,7 @@ ink.checkDeliverability = async (btn) => {
       ${row(k.dmarc ? (k.dmarcPolicy === 'none' ? 'warn' : true) : false, 'DMARC policy', k.dmarc ? `Found (p=${k.dmarcPolicy}).${k.dmarcPolicy === 'none' ? ' Good start — move to p=quarantine once a few sends have gone cleanly.' : ''}` : `Gmail and Yahoo require DMARC for bulk senders. Add this TXT record (click to copy):<br><span class="code copy" onclick="ink.copy(this)" title="Click to copy">${esc(k.dmarcRecord.name)}</span> → <span class="code copy" onclick="ink.copy(this)" title="Click to copy" style="word-break:break-all">${esc(k.dmarcRecord.value)}</span>`)}
       ${row(true, 'One-click unsubscribe + plain-text part', 'Every letter carries List-Unsubscribe headers, a visible unsubscribe link, and a text version — all required by Gmail.')}
       ${row(k.postalAddress, 'Postal address in footer', k.postalAddress ? 'Present.' : 'Required by anti-spam law — add it above.')}
+      ${k.dailyCap ? row('warn', 'Daily sending budget', `${k.dailyCap} emails a day on the current email plan (Resend Free). Bigger letters are spread over several days automatically. Upgrading the provider plan removes the limit.`) : ''}
       ${row(k.stage === 'established' ? true : 'warn', 'Sender reputation', stageText + ` ${k.totalSent.toLocaleString()} letters sent so far.`)}
       ${row(k.complaintRate < 0.001 && k.bounceRate < 0.02 ? true : 'warn', 'List hygiene', `Bounces ${pct(k.bounceRate)} (keep under 2%) · complaints ${pct(k.complaintRate)} (keep under 0.1%)${k.openRate != null ? ' · opens ' + pct(k.openRate) : ''}. ${k.doubleOptIn ? 'Double opt-in is on.' : 'Consider double opt-in for new sign-ups.'}`)}
       <p class="small dim" style="margin-top:.75rem">Register ${esc(r.domain.split('.').slice(-2).join('.'))} with <a href="https://postmaster.google.com" target="_blank" rel="noopener">Google Postmaster Tools</a> to watch your Gmail reputation directly. Ask readers to reply to your first letter or add you to contacts — replies are the strongest inbox signal there is.</p>`;

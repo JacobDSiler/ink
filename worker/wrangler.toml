@@ -25,6 +25,9 @@ GEMINI_MODEL = "gemini-2.5-flash"
 INK_FROM_DOMAIN = "mail.ink.jacobsiler.com"
 # Region for author sending domains created through Ink (eu-west-1 | us-east-1 | sa-east-1 | ap-northeast-1)
 RESEND_REGION = "eu-west-1"
+# Daily sending budget for the whole instance, matching the email provider's plan.
+# Resend Free = 100/day → set 95 (leaves room for welcome + test emails). Paid plans have no daily limit → set 0.
+DAILY_SEND_CAP = "95"
 # Where the app lives (links in nudge emails)
 APP_URL = "https://ink.jacobsiler.com"
 # This Worker's public URL (join pages, unsubscribe links, approve links). Use a custom route if you add one.
