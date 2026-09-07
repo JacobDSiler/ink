@@ -23,6 +23,8 @@ FIREBASE_WEB_API_KEY = "AIzaSyDxLI57pgS9WX1ekMerbcx8M6aVeWacpy0"
 GEMINI_MODEL = "gemini-2.5-flash"
 # Shared sending domain — verify it in Resend (see README). Authors send as penname@this-domain.
 INK_FROM_DOMAIN = "mail.ink.jacobsiler.com"
+# Region for author sending domains created through Ink (eu-west-1 | us-east-1 | sa-east-1 | ap-northeast-1)
+RESEND_REGION = "eu-west-1"
 # Where the app lives (links in nudge emails)
 APP_URL = "https://ink.jacobsiler.com"
 # This Worker's public URL (join pages, unsubscribe links, approve links). Use a custom route if you add one.

@@ -1007,7 +1007,7 @@ async function route(request, env, ctx) {
   if (path === '/domain' && m === 'POST') {
     const domain = String(body.domain || '').toLowerCase().trim();
     if (!/^[a-z0-9.-]+\.[a-z]{2,}$/.test(domain)) bad('Enter a domain like mail.yourname.com');
-    const r = await resend(env, '/domains', { name: domain });
+    const r = await resend(env, '/domains', { name: domain, region: env.RESEND_REGION || 'eu-west-1' });
     const records = (r.records || []).map(x => ({ type: x.type, name: x.name, value: x.value, priority: x.priority || null }));
     await db.set(`authors/${uid}`, { customDomain: { domain, resendId: r.id, status: 'pending', records, createdAt: nowIso() }, updatedAt: nowIso() });
     return json({ ok: true, domain, records });
