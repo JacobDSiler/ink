@@ -27,7 +27,7 @@ legacy/index.html     the original single-author Ink Room page
 ### 1. Firebase (project `miscellaneous-117e9`)
 1. Authentication → enable **Google** and **Email/Password**. Add `ink.jacobsiler.com` to authorised domains (authDomain is already `auth.jacobsiler.com`).
 2. Firestore rules: `firestore.rules` is the full merged file (Boxes + Folio + Ink). `deploy.cmd` publishes it via the Firebase CLI (`npm i -g firebase-tools`, then `firebase login` once); or paste it into the console.
-3. Project settings → Service accounts → **Generate new private key**. Keep the JSON; it becomes the `FIREBASE_SERVICE_ACCOUNT` secret.
+3. Project settings → Service accounts → **Generate new private key**. Save the downloaded file as `worker/service-account.json` (git-ignored); `push-secrets.cmd` uploads it as `FIREBASE_SERVICE_ACCOUNT_B64`.
 
 ### 2. Resend
 1. Create an API key → `RESEND_API_KEY`.

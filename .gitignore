@@ -3,6 +3,8 @@ worker/node_modules/
 worker/.wrangler/
 worker/.dev.vars
 *service-account*.json
+worker/service-account.json
+.sa.b64.tmp
 .firebase/
 firebase-debug.log
 .dev.vars.tmp

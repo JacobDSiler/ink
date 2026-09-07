@@ -105,9 +105,23 @@ function pemToArrayBuffer(pem) {
   for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
   return buf.buffer;
 }
+// The service-account JSON can be supplied raw (FIREBASE_SERVICE_ACCOUNT) or base64-encoded
+// (FIREBASE_SERVICE_ACCOUNT_B64 — safer: no quotes to lose in shells or .env parsers).
+function loadServiceAccount(env) {
+  let raw = '';
+  if (env.FIREBASE_SERVICE_ACCOUNT_B64) { try { raw = atob(String(env.FIREBASE_SERVICE_ACCOUNT_B64).replace(/\s+/g, '')); } catch { throw new HttpError(503, 'FIREBASE_SERVICE_ACCOUNT_B64 is not valid base64. Re-run worker\\push-secrets.cmd with service-account.json in the worker folder.'); } }
+  else raw = String(env.FIREBASE_SERVICE_ACCOUNT || '');
+  let sa;
+  try { sa = JSON.parse(raw); } catch {
+    throw new HttpError(503, `FIREBASE_SERVICE_ACCOUNT is not valid JSON (stored value starts with "${raw.slice(0, 12)}"). Easiest fix: save the Firebase service-account JSON as worker\\service-account.json and run worker\\push-secrets.cmd — it uploads it safely as FIREBASE_SERVICE_ACCOUNT_B64.`);
+  }
+  if (!sa.client_email || !sa.private_key) throw new HttpError(503, 'FIREBASE_SERVICE_ACCOUNT JSON is missing client_email/private_key — make sure it is the key file from Firebase > Project settings > Service accounts.');
+  return sa;
+}
+
 async function serviceToken(env) {
   if (saToken && saToken.exp > Date.now() + 60e3) return saToken.token;
-  const sa = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT);
+  const sa = loadServiceAccount(env);
   const iat = Math.floor(Date.now() / 1000);
   const header = b64urlStr(JSON.stringify({ alg: 'RS256', typ: 'JWT' }));
   const claims = b64urlStr(JSON.stringify({ iss: sa.client_email, scope: 'https://www.googleapis.com/auth/datastore', aud: sa.token_uri || 'https://oauth2.googleapis.com/token', iat, exp: iat + 3600 }));
@@ -735,8 +749,8 @@ async function handleResendEvent(env, db, evt) {
 
 // ─────────────────────────────────────────────────────────────── router ──
 
-const REQUIRED_SECRETS = ['FIREBASE_SERVICE_ACCOUNT', 'RESEND_API_KEY', 'GEMINI_API_KEY', 'INK_SIGNING_SECRET'];
-function missingConfig(env) { return REQUIRED_SECRETS.filter(k => !env[k]); }
+const REQUIRED_SECRETS = ['RESEND_API_KEY', 'GEMINI_API_KEY', 'INK_SIGNING_SECRET'];
+function missingConfig(env) { const m = REQUIRED_SECRETS.filter(k => !env[k]); if (!env.FIREBASE_SERVICE_ACCOUNT && !env.FIREBASE_SERVICE_ACCOUNT_B64) m.unshift('FIREBASE_SERVICE_ACCOUNT_B64'); return m; }
 
 async function route(request, env, ctx) {
   const url = new URL(request.url);

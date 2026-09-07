@@ -6,9 +6,10 @@
 #
 # .dev.vars is also what `wrangler dev` reads for local testing, so it does double duty.
 
-# Firebase console > Project settings > Service accounts > Generate new private key.
-# Paste the WHOLE JSON on one line (it starts with {"type":"service_account", ...).
-FIREBASE_SERVICE_ACCOUNT=
+# Firebase service account: DO NOT paste it here. Firebase console > Project settings >
+# Service accounts > Generate new private key, then save the downloaded file as
+#   service-account.json   in this worker folder (git-ignored).
+# push-secrets.cmd uploads it safely, base64-encoded, as FIREBASE_SERVICE_ACCOUNT_B64.
 
 # resend.com > API Keys > Create API key (name it "ink")
 RESEND_API_KEY=
