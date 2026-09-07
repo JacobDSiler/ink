@@ -197,6 +197,14 @@ class Firestore {
     return this.commit([{ update: { name: `${this.docRoot}/${path}`, fields: {} }, updateMask: { fieldPaths: [] } }, write]);
   }
   async commit(writes) { return this.req('POST', `${this.base}:commit`, { writes }); }
+  async batchGet(paths) {
+    const out = [];
+    for (let i = 0; i < paths.length; i += 300) {
+      const rows = await this.req('POST', `${this.base}:batchGet`, { documents: paths.slice(i, i + 300).map(p => `${this.docRoot}/${p}`) });
+      for (const r of rows || []) if (r.found) out.push(this.docFromApi(r.found));
+    }
+    return out;
+  }
   writeSet(path, data, merge = true) {
     const w = { update: { name: `${this.docRoot}/${path}`, fields: fsEncodeFields(data) } };
     if (merge) w.updateMask = { fieldPaths: Object.keys(data).filter(k => data[k] !== undefined) };
@@ -410,6 +418,22 @@ async function sendSingle(env, db, uid, author, sub, campaign, { kind = 'single'
 }
 
 /** Create/continue a campaign send job. Returns job state. */
+// Engagement score: most recently engaged readers first. Sending to people who open builds
+// domain reputation early in the send, which is what mailbox providers watch.
+function engagementScore(s) {
+  const last = Math.max(s.lastOpenAt ? Date.parse(s.lastOpenAt) : 0, s.lastClickAt ? Date.parse(s.lastClickAt) : 0);
+  return last * 10 + (s.opens || 0) * 864e5 + (s.clicks || 0) * 3 * 864e5 + (s.createdAt ? Date.parse(s.createdAt) / 1000 : 0);
+}
+// Warm-up pacing: how many recipients one cron tick (every 5 min) may send for this author.
+// New senders ramp: <500 lifetime sends → 100/tick (~1,200/h); <2,000 → 300/tick; then 1,000/tick.
+function paceLimit(author) {
+  const total = author.totalSent || 0;
+  const d = author.customDomain && author.customDomain.status === 'verified' && author.customDomain.verifiedAt ? (Date.now() - Date.parse(author.customDomain.verifiedAt)) / 864e5 : 999;
+  if (total < 500 || d < 3) return 100;
+  if (total < 2000 || d < 10) return 300;
+  return 1000;
+}
+
 async function runSendJob(env, db, uid, cid, maxBatches = 8) {
   const jobPath = `jobs/${uid}_${cid}`;
   let job = await db.get(jobPath);
@@ -419,64 +443,86 @@ async function runSendJob(env, db, uid, cid, maxBatches = 8) {
   if (!author) throw new HttpError(404, 'Author profile not found');
   const t = nowIso();
   if (!job) {
-    job = { uid, cid, status: 'running', cursor: null, sent: 0, failed: 0, batches: 0, createdAt: t, updatedAt: t };
+    // Build the queue once: every eligible reader, engaged-first, stored in chunks of 4,000 ids.
+    const all = []; let last = null;
+    for (let i = 0; i < 50; i++) {
+      const rows = await db.query(`authors/${uid}`, 'subscribers', { orderBy: [['__name__', 'asc']], limit: 1000, startAfter: last ? [{ referenceValue: last }] : undefined });
+      for (const r of rows) if (r.status === 'active' && segmentMatch(r, campaign.segment)) all.push(r);
+      if (rows.length < 1000) break; last = rows[rows.length - 1]._name;
+    }
+    all.sort((a, b) => engagementScore(b) - engagementScore(a));
+    const ids = all.map(r => r.id);
+    const writes = [];
+    for (let i = 0; i * 4000 < ids.length; i++) writes.push(db.writeSet(`jobs/${uid}_${cid}/q/${i}`, { ids: ids.slice(i * 4000, (i + 1) * 4000) }, false));
+    if (writes.length) await db.commitChunked(writes);
+    job = { uid, cid, status: 'running', total: ids.length, chunks: writes.length, qi: 0, qo: 0, sent: 0, failed: 0, batches: 0, pace: paceLimit(author), createdAt: t, updatedAt: t };
     await db.set(jobPath, job, false);
     await db.set(`authors/${uid}/campaigns/${cid}`, { status: 'sending', sendStartedAt: t, updatedAt: t });
+    await db.updatePaths(`authors/${uid}/campaigns/${cid}`, { 'stats.recipients': ids.length });
+    if (!ids.length) { job.status = 'done'; }
   }
-  if (job.status !== 'running') return job;
+  if (job.status !== 'running') { if (job.status === 'done' && !job.finishedAt) await finishJob(env, db, uid, cid, job, campaign, author); return job; }
 
-  for (let b = 0; b < maxBatches; b++) {
-    // collect up to 100 eligible recipients
-    const batch = [];
-    let exhausted = false;
-    while (batch.length < 100 && !exhausted) {
-      const rows = await db.query(`authors/${uid}`, 'subscribers', { orderBy: [['__name__', 'asc']], limit: 200, startAfter: job.cursor ? [{ referenceValue: job.cursor }] : undefined });
-      if (!rows.length) { exhausted = true; break; }
-      for (const s of rows) { if (batch.length < 100 && s.status === 'active' && segmentMatch(s, campaign.segment)) batch.push(s); job.cursor = s._name; if (batch.length >= 100) break; }
-      if (rows.length < 200 && batch.length < 100) exhausted = true;
+  let sentThisRun = 0;
+  const limit = job.pace || paceLimit(author);
+  for (let b = 0; b < maxBatches && sentThisRun < limit; b++) {
+    // next up to 100 ids from the queue
+    let chunk = null, ids = [];
+    while (ids.length < 100 && job.qi < job.chunks) {
+      if (!chunk || chunk._i !== job.qi) { chunk = await db.get(`jobs/${uid}_${cid}/q/${job.qi}`); if (!chunk) { job.qi++; job.qo = 0; continue; } chunk._i = job.qi; }
+      const take = Math.min(100 - ids.length, limit - sentThisRun - ids.length, chunk.ids.length - job.qo);
+      if (take <= 0) break;
+      ids = ids.concat(chunk.ids.slice(job.qo, job.qo + take)); job.qo += take;
+      if (job.qo >= chunk.ids.length) { job.qi++; job.qo = 0; }
     }
-    if (batch.length) {
-      const payloads = [];
-      for (const s of batch) {
-        const token = await unsubToken(env, uid, s.id);
-        payloads.push(emailPayload(env, uid, author, s, token, { ...campaign, trackId: cid }, [{ name: 'campaign', value: cid }]));
+    const exhausted = job.qi >= job.chunks;
+    if (ids.length) {
+      // re-read the readers now: skip anyone who unsubscribed/bounced since the job was queued
+      const batch = (await db.batchGet(ids.map(id => `authors/${uid}/subscribers/${id}`))).filter(s => s.status === 'active');
+      if (batch.length) {
+        const payloads = [];
+        for (const s of batch) {
+          const token = await unsubToken(env, uid, s.id);
+          payloads.push(emailPayload(env, uid, author, s, token, { ...campaign, trackId: cid }, [{ name: 'campaign', value: cid }]));
+        }
+        let rids = [];
+        try { const res = await resend(env, '/emails/batch', payloads); rids = (res.data || []).map(x => x.id); }
+        catch (e) {
+          job.failed += batch.length;
+          await db.set(jobPath, { failed: job.failed, qi: job.qi, qo: job.qo, lastError: String(e.message).slice(0, 500), updatedAt: nowIso() });
+          continue;
+        }
+        const writes = [];
+        batch.forEach((s, i) => {
+          const id = rids[i] || null;
+          writes.push(db.writeSet(`authors/${uid}/campaigns/${cid}/recipients/${s.id}`, { email: s.email, resendId: id, status: id ? 'sent' : 'failed', sentAt: nowIso() }));
+          if (id) writes.push(db.writeSet(`emailIndex/${id}`, { uid, sid: s.id, cid, kind: 'campaign', at: nowIso() }));
+        });
+        await db.commitChunked(writes);
+        const ok = rids.filter(Boolean).length;
+        job.sent += ok; job.failed += batch.length - ok; job.batches += 1; sentThisRun += batch.length;
+        await db.increment(`authors/${uid}/campaigns/${cid}`, { 'stats.sent': ok });
       }
-      let ids = [];
-      try {
-        const res = await resend(env, '/emails/batch', payloads);
-        ids = (res.data || []).map(x => x.id);
-      } catch (e) {
-        job.failed += batch.length;
-        await db.set(jobPath, { failed: job.failed, cursor: job.cursor, lastError: String(e.message).slice(0, 500), updatedAt: nowIso() });
-        continue;
-      }
-      const writes = [];
-      batch.forEach((s, i) => {
-        const id = ids[i] || null;
-        writes.push(db.writeSet(`authors/${uid}/campaigns/${cid}/recipients/${s.id}`, { email: s.email, resendId: id, status: id ? 'sent' : 'failed', sentAt: nowIso() }));
-        if (id) writes.push(db.writeSet(`emailIndex/${id}`, { uid, sid: s.id, cid, kind: 'campaign', at: nowIso() }));
-      });
-      await db.commitChunked(writes);
-      job.sent += ids.filter(Boolean).length;
-      job.failed += batch.length - ids.filter(Boolean).length;
-      job.batches += 1;
-      await db.set(jobPath, { sent: job.sent, failed: job.failed, batches: job.batches, cursor: job.cursor, updatedAt: nowIso() });
-      await db.increment(`authors/${uid}/campaigns/${cid}`, { 'stats.sent': ids.filter(Boolean).length, 'stats.recipients': batch.length });
+      await db.set(jobPath, { sent: job.sent, failed: job.failed, batches: job.batches, qi: job.qi, qo: job.qo, updatedAt: nowIso() });
     }
-    if (exhausted) {
-      job.status = 'done';
-      const doneAt = nowIso();
-      await db.set(jobPath, { status: 'done', finishedAt: doneAt });
-      await db.set(`authors/${uid}/campaigns/${cid}`, { status: 'sent', sentAt: doneAt, updatedAt: doneAt, reportAt: addDays(doneAt, 2) });
-      await db.set(`authors/${uid}`, { lastSentAt: doneAt, lastSentSubject: campaign.subject, updatedAt: doneAt });
-      await db.set(`schedule/report_${uid}_${cid}`, { kind: 'report', uid, cid, at: addDays(doneAt, 2) });
-      await db.increment(`authors/${uid}/metricsDaily/${doneAt.slice(0, 10)}`, { sent: job.sent });
-      // mark plan item sent
-      if (campaign.planId && campaign.planItemId) await markPlanItem(db, uid, campaign.planId, campaign.planItemId, { status: 'sent', sentAt: doneAt });
-      break;
-    }
+    if (exhausted) { job.status = 'done'; await finishJob(env, db, uid, cid, job, campaign, author); break; }
   }
   return job;
+}
+
+async function finishJob(env, db, uid, cid, job, campaign, author) {
+  const doneAt = nowIso();
+  job.finishedAt = doneAt;
+  await db.set(`jobs/${uid}_${cid}`, { status: 'done', finishedAt: doneAt });
+  await db.set(`authors/${uid}/campaigns/${cid}`, { status: 'sent', sentAt: doneAt, updatedAt: doneAt, reportAt: addDays(doneAt, 2) });
+  await db.set(`authors/${uid}`, { lastSentAt: doneAt, lastSentSubject: campaign.subject, updatedAt: doneAt });
+  await db.increment(`authors/${uid}`, { totalSent: job.sent });
+  await db.set(`schedule/report_${uid}_${cid}`, { kind: 'report', uid, cid, at: addDays(doneAt, 2) });
+  await db.increment(`authors/${uid}/metricsDaily/${doneAt.slice(0, 10)}`, { sent: job.sent });
+  // clean the queue chunks
+  const dels = []; for (let i = 0; i < (job.chunks || 0); i++) dels.push(db.writeDelete(`jobs/${uid}_${cid}/q/${i}`));
+  if (dels.length) await db.commitChunked(dels);
+  if (campaign.planId && campaign.planItemId) await markPlanItem(db, uid, campaign.planId, campaign.planItemId, { status: 'sent', sentAt: doneAt });
 }
 
 async function markPlanItem(db, uid, planId, itemId, patch) {
@@ -938,6 +984,26 @@ async function route(request, env, ctx) {
     bad('Unknown campaign action');
   }
 
+  if (path === '/deliverability' && m === 'GET') {
+    const cd = author.customDomain; const verified = cd && cd.status === 'verified';
+    const domain = verified ? cd.domain : env.INK_FROM_DOMAIN;
+    const orgDomain = domain.split('.').slice(-2).join('.');
+    const doh = async (name, type) => { try { const r = await (await fetch(`https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(name)}&type=${type}`, { headers: { accept: 'application/dns-json' } })).json(); return (r.Answer || []).map(a => String(a.data).replace(/^"|"$/g, '')); } catch { return []; } };
+    const [mx, spf, dkim, dmarcSub, dmarcOrg] = await Promise.all([doh(`send.${domain}`, 'MX'), doh(`send.${domain}`, 'TXT'), doh(`resend._domainkey.${domain}`, 'TXT'), doh(`_dmarc.${domain}`, 'TXT'), doh(`_dmarc.${orgDomain}`, 'TXT')]);
+    const dmarc = dmarcSub.find(x => /v=DMARC1/i.test(x)) || dmarcOrg.find(x => /v=DMARC1/i.test(x)) || '';
+    const policy = (dmarc.match(/p=(none|quarantine|reject)/i) || [])[1] || null;
+    const sent = (await db.query(`authors/${uid}`, 'campaigns', { orderBy: [['sentAt', 'desc']], limit: 20 })).filter(c => c.status === 'sent');
+    const tot = sent.reduce((a, c) => { const st = c.stats || {}; a.sent += st.sent || 0; a.bounced += st.bounced || 0; a.complained += st.complained || 0; a.opens += st.uniqueOpens || 0; return a; }, { sent: 0, bounced: 0, complained: 0, opens: 0 });
+    const total = author.totalSent || 0;
+    const stage = total < 500 ? 'warming' : total < 2000 ? 'building' : 'established';
+    return json({ ok: true, domain, usingOwnDomain: !!verified, checks: {
+      spf: spf.some(x => /v=spf1/i.test(x)) && mx.length > 0, dkim: dkim.some(x => /p=/.test(x)), dmarc: !!dmarc, dmarcPolicy: policy, dmarcRecord: { name: `_dmarc.${domain}`, value: `v=DMARC1; p=none; rua=mailto:${author.replyTo || author.email || ''}` },
+      postalAddress: !!author.postalAddress, replyTo: !!(author.replyTo || author.email), unsubscribe: true, plainText: true,
+      bounceRate: tot.sent ? tot.bounced / tot.sent : 0, complaintRate: tot.sent ? tot.complained / tot.sent : 0, openRate: tot.sent ? tot.opens / tot.sent : null,
+      totalSent: total, stage, pacePerHour: paceLimit(author) * 12, doubleOptIn: !!author.doubleOptIn
+    } });
+  }
+
   if (path === '/domain' && m === 'POST') {
     const domain = String(body.domain || '').toLowerCase().trim();
     if (!/^[a-z0-9.-]+\.[a-z]{2,}$/.test(domain)) bad('Enter a domain like mail.yourname.com');
@@ -948,8 +1014,20 @@ async function route(request, env, ctx) {
   }
   if (path === '/domain/verify' && m === 'POST') {
     const d = author.customDomain; if (!d || !d.resendId) bad('No custom domain set up.');
-    await resend(env, `/domains/${d.resendId}/verify`, null, 'POST').catch(() => { });
-    const r = await resend(env, `/domains/${d.resendId}`, null, 'GET');
+    let r;
+    try {
+      await resend(env, `/domains/${d.resendId}/verify`, null, 'POST').catch(() => { });
+      r = await resend(env, `/domains/${d.resendId}`, null, 'GET');
+    } catch (e) {
+      if (/404|not found/i.test(e.message)) {
+        // The Resend entry Ink created no longer exists (deleted or re-created in the Resend dashboard).
+        // Look for an entry with the same name and adopt it; otherwise clear so the author can set up again.
+        const list = await resend(env, '/domains', null, 'GET').catch(() => ({ data: [] }));
+        const match = (list.data || []).find(x => x.name === d.domain);
+        if (!match) { await db.set(`authors/${uid}`, { customDomain: null, updatedAt: nowIso() }); bad(`Resend no longer has an entry for ${d.domain} — it was deleted or re-created outside Ink. Click "Set up" again and add the records it shows.`); }
+        r = await resend(env, `/domains/${match.id}`, null, 'GET'); d.resendId = match.id; d.adopted = true;
+      } else throw e;
+    }
     const status = r.status === 'verified' ? 'verified' : (r.status || 'pending');
     const patch = { ...d, status, checkedAt: nowIso(), records: r.records && r.records.length ? r.records.map(x => ({ type: x.type, name: x.name, value: x.value, priority: x.priority || null, status: x.status || null })) : d.records };
     if (status === 'verified' && !d.verifiedAt) patch.verifiedAt = nowIso();
@@ -1048,7 +1126,11 @@ async function runCron(env, ctx) {
           }
           await db.set(`authors/${a.id}`, { customDomain: patch, updatedAt: t });
         }
-      } catch (e) { console.error('domain check', a.id, e.message); await db.set(`authors/${a.id}`, { customDomain: { ...d, checkedAt: t, lastError: String(e.message).slice(0, 200) } }); }
+      } catch (e) {
+        console.error('domain check', a.id, e.message);
+        const msg = /404|not found/i.test(e.message) ? `Resend no longer has this domain entry — open Settings and click "Check verification" to re-link it, or "Remove" and set it up again.` : String(e.message).slice(0, 200);
+        await db.set(`authors/${a.id}`, { customDomain: { ...d, checkedAt: t, lastError: msg } });
+      }
     }
   } catch (e) { console.error('domain poll', e.message); }
   // 4. daily nudges per author
