@@ -412,7 +412,9 @@ async function sendSingle(env, db, uid, author, sub, campaign, { kind = 'single'
   const sid = sub.sid || sub.id || (await subscriberId(sub.email));
   const token = await unsubToken(env, uid, sid);
   const payload = emailPayload(env, uid, author, { ...sub, id: sid }, token, campaign, [{ name: 'kind', value: kind }]);
-  const res = await resend(env, '/emails', payload);
+  let res;
+  try { res = await resend(env, '/emails', payload); }
+  catch (e) { if (/429|rate limit|quota|daily|limit/i.test(String(e.message))) throw new HttpError(429, 'The email provider\'s sending limit has been reached for today. Campaign sends pause and resume automatically; test emails will work again when the limit resets (or after upgrading the Resend plan).'); throw e; }
   if (track && res && res.id) await db.set(`emailIndex/${res.id}`, { uid, sid, kind, cid: campaign.id || null, at: nowIso() });
   return res;
 }
@@ -462,11 +464,13 @@ async function runSendJob(env, db, uid, cid, maxBatches = 8) {
     if (!ids.length) { job.status = 'done'; }
   }
   if (job.status !== 'running') { if (job.status === 'done' && !job.finishedAt) await finishJob(env, db, uid, cid, job, campaign, author); return job; }
+  if (job.pausedUntil && Date.parse(job.pausedUntil) > Date.now()) return job; // sending limit reached earlier — wait
 
   let sentThisRun = 0;
   const limit = job.pace || paceLimit(author);
   for (let b = 0; b < maxBatches && sentThisRun < limit; b++) {
     // next up to 100 ids from the queue
+    const qStart = { qi: job.qi, qo: job.qo };
     let chunk = null, ids = [];
     while (ids.length < 100 && job.qi < job.chunks) {
       if (!chunk || chunk._i !== job.qi) { chunk = await db.get(`jobs/${uid}_${cid}/q/${job.qi}`); if (!chunk) { job.qi++; job.qo = 0; continue; } chunk._i = job.qi; }
@@ -486,10 +490,22 @@ async function runSendJob(env, db, uid, cid, maxBatches = 8) {
           payloads.push(emailPayload(env, uid, author, s, token, { ...campaign, trackId: cid }, [{ name: 'campaign', value: cid }]));
         }
         let rids = [];
+        const qiBefore = qStart.qi, qoBefore = qStart.qo;
         try { const res = await resend(env, '/emails/batch', payloads); rids = (res.data || []).map(x => x.id); }
         catch (e) {
+          const msg = String(e.message || '');
+          if (/429|rate limit|quota|daily|limit/i.test(msg)) {
+            // Sending limit reached (Resend plan cap or rate limit): rewind this batch and pause.
+            // Daily quota → resume after the next UTC midnight (+10 min); plain rate limit → resume in 15 minutes.
+            const daily = /daily|quota|plan/i.test(msg);
+            const until = daily ? new Date(Math.ceil(Date.now() / 864e5) * 864e5 + 10 * 60e3).toISOString() : new Date(Date.now() + 15 * 60e3).toISOString();
+            job.qi = qiBefore; job.qo = qoBefore; job.pausedUntil = until;
+            await db.set(jobPath, { qi: job.qi, qo: job.qo, pausedUntil: until, lastError: msg.slice(0, 300), updatedAt: nowIso() });
+            await db.set(`authors/${uid}/campaigns/${cid}`, { sendPausedUntil: until, sendPauseReason: daily ? 'Your email provider\'s daily sending limit was reached. Sending resumes automatically when it resets; the remaining readers will get the letter then.' : 'Sending is being rate-limited; it resumes automatically in a few minutes.', updatedAt: nowIso() });
+            return job;
+          }
           job.failed += batch.length;
-          await db.set(jobPath, { failed: job.failed, qi: job.qi, qo: job.qo, lastError: String(e.message).slice(0, 500), updatedAt: nowIso() });
+          await db.set(jobPath, { failed: job.failed, qi: job.qi, qo: job.qo, lastError: msg.slice(0, 500), updatedAt: nowIso() });
           continue;
         }
         const writes = [];
@@ -503,7 +519,8 @@ async function runSendJob(env, db, uid, cid, maxBatches = 8) {
         job.sent += ok; job.failed += batch.length - ok; job.batches += 1; sentThisRun += batch.length;
         await db.increment(`authors/${uid}/campaigns/${cid}`, { 'stats.sent': ok });
       }
-      await db.set(jobPath, { sent: job.sent, failed: job.failed, batches: job.batches, qi: job.qi, qo: job.qo, updatedAt: nowIso() });
+      await db.set(jobPath, { sent: job.sent, failed: job.failed, batches: job.batches, qi: job.qi, qo: job.qo, pausedUntil: null, updatedAt: nowIso() });
+      if (campaign.sendPausedUntil) { campaign.sendPausedUntil = null; await db.set(`authors/${uid}/campaigns/${cid}`, { sendPausedUntil: null, sendPauseReason: null }); }
     }
     if (exhausted) { job.status = 'done'; await finishJob(env, db, uid, cid, job, campaign, author); break; }
   }
@@ -514,7 +531,7 @@ async function finishJob(env, db, uid, cid, job, campaign, author) {
   const doneAt = nowIso();
   job.finishedAt = doneAt;
   await db.set(`jobs/${uid}_${cid}`, { status: 'done', finishedAt: doneAt });
-  await db.set(`authors/${uid}/campaigns/${cid}`, { status: 'sent', sentAt: doneAt, updatedAt: doneAt, reportAt: addDays(doneAt, 2) });
+  await db.set(`authors/${uid}/campaigns/${cid}`, { status: 'sent', sentAt: doneAt, updatedAt: doneAt, reportAt: addDays(doneAt, 2), sendPausedUntil: null, sendPauseReason: null });
   await db.set(`authors/${uid}`, { lastSentAt: doneAt, lastSentSubject: campaign.subject, updatedAt: doneAt });
   await db.increment(`authors/${uid}`, { totalSent: job.sent });
   await db.set(`schedule/report_${uid}_${cid}`, { kind: 'report', uid, cid, at: addDays(doneAt, 2) });
@@ -963,8 +980,8 @@ async function route(request, env, ctx) {
       if (c.status === 'sent' || c.status === 'sending') bad('This campaign has already been sent.');
       if (body.confirm !== 'SEND') bad('Send was not confirmed.');
       const job = await runSendJob(env, db, uid, cid, 6);
-      if (job.status === 'running') ctx.waitUntil(runSendJob(env, db, uid, cid, 20).catch(e => console.error(e)));
-      return json({ ok: true, job });
+      if (job.status === 'running' && !job.pausedUntil) ctx.waitUntil(runSendJob(env, db, uid, cid, 20).catch(e => console.error(e)));
+      return json({ ok: true, job, paused: !!job.pausedUntil, pausedUntil: job.pausedUntil || null });
     }
     if (action === 'schedule' && m === 'POST') {
       if (!author.postalAddress) bad('Add a postal address in Settings first — anti-spam law requires one in every marketing email.');
@@ -978,6 +995,19 @@ async function route(request, env, ctx) {
       await db.delete(`schedule/send_${uid}_${cid}`);
       await db.set(`authors/${uid}/campaigns/${cid}`, { status: 'draft', scheduledAt: null, updatedAt: nowIso() });
       return json({ ok: true });
+    }
+    if (action === 'retry' && m === 'POST') {
+      // Re-queue readers whose delivery failed (e.g. a daily limit hit before pause-and-resume existed).
+      if (c.status !== 'sent') bad('Only a finished send can be retried.');
+      const failed = (await db.query(`authors/${uid}/campaigns/${cid}`, 'recipients', { where: [['status', '==', 'failed']], limit: 5000 })).map(r => r.id);
+      if (!failed.length) bad('Everyone received this letter — nothing to retry.');
+      const t = nowIso();
+      await db.set(`jobs/${uid}_${cid}/q/0`, { ids: failed }, false);
+      await db.set(`jobs/${uid}_${cid}`, { uid, cid, status: 'running', total: failed.length, chunks: 1, qi: 0, qo: 0, sent: 0, failed: 0, batches: 0, pace: paceLimit(author), retry: true, createdAt: t, updatedAt: t }, false);
+      await db.set(`authors/${uid}/campaigns/${cid}`, { status: 'sending', updatedAt: t });
+      const job = await runSendJob(env, db, uid, cid, 6);
+      if (job.status === 'running' && !job.pausedUntil) ctx.waitUntil(runSendJob(env, db, uid, cid, 20).catch(e => console.error(e)));
+      return json({ ok: true, queued: failed.length, paused: !!job.pausedUntil, pausedUntil: job.pausedUntil || null });
     }
     if (action === 'job' && m === 'GET') return json({ ok: true, job: await db.get(`jobs/${uid}_${cid}`) });
     if (action === 'report' && m === 'POST') { await campaignReport(env, db, uid, cid); return json({ ok: true }); }

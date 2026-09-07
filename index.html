@@ -635,6 +635,7 @@ function renderCampaign(id) {
 }
 function campaignStatusBar(c) {
   if (c.status === 'scheduled') return `<div class="msg msg-info visible" style="margin:0 0 1rem">Approved. Goes out ${fmtDateTime(c.scheduledAt)}. <button class="btn btn-sm btn-ghost" onclick="ink.unschedule('${c.id}')">Cancel schedule</button></div>`;
+  if (c.status === 'sending' && c.sendPausedUntil && new Date(c.sendPausedUntil) > new Date()) return `<div class="msg msg-error visible" style="margin:0 0 1rem"><b>Paused at ${(c.stats?.sent || 0).toLocaleString()} of ${(c.stats?.recipients || 0).toLocaleString()}.</b> ${esc(c.sendPauseReason || '')} Resumes ${fmtDateTime(c.sendPausedUntil)} — nothing to do on your side; no reader will get it twice.</div>`;
   if (c.status === 'sending') return `<div class="msg msg-info visible" style="margin:0 0 1rem">Sending — ${(c.stats?.sent || 0).toLocaleString()} of ${(c.stats?.recipients || 0).toLocaleString()} so far, most engaged readers first. New senders are paced (a few hundred an hour) to build inbox reputation; this page updates automatically.</div>`;
   if (c.status === 'sent') return `<div class="msg msg-success visible" style="margin:0 0 1rem">Sent ${fmtDateTime(c.sentAt)} to ${c.stats?.sent || 0} readers.</div>`;
   return '';
@@ -645,6 +646,7 @@ function campaignStatsCard(c) {
   const bars = [['Delivered', s.delivered, 'var(--parch-dark)'], ['Opened', s.uniqueOpens, 'var(--chart-1)'], ['Clicked', s.uniqueClicks, 'var(--chart-2)'], ['Unsubscribed', s.unsubscribed, 'var(--ember)'], ['Bounced', s.bounced, 'var(--ember)']];
   return `<div class="card" id="ed-stats"><div class="card-head"><span class="g">▤</span><h3>How it did</h3></div><div class="card-body">
     ${bars.map(([l, v, col]) => `<div style="display:flex;align-items:center;gap:.6rem;margin:.35rem 0"><div style="width:100px" class="small muted">${l}</div><div style="flex:1;height:8px;background:var(--ink);border-radius:4px;overflow:hidden"><i style="display:block;height:100%;width:${n ? Math.min(100, 100 * (v || 0) / n) : 0}%;background:${col};border-radius:4px"></i></div><div class="num small" style="width:90px">${v || 0} · ${pct(v, n)}</div></div>`).join('')}
+    ${(s.recipients || 0) > (s.sent || 0) ? `<div class="msg msg-error visible">${((s.recipients || 0) - (s.sent || 0)).toLocaleString()} readers did not receive this letter (the sending limit was hit). <button class="btn btn-sm" style="margin-left:.5rem" onclick="ink.retrySend('${c.id}',this)">Send it to them now</button></div>` : ''}
     ${c.report?.insight ? `<div class="msg msg-info visible">Ink: ${esc(c.report.insight)}</div>` : `<div class="small dim" style="margin-top:.6rem">Opens and clicks arrive as readers open the email. Ink sends you a report after 48 hours.</div>`}
   </div></div>`;
 }
@@ -694,7 +696,7 @@ ink.sendNow = async (id, btn) => {
   if (/\[[^\]]{3,}\]/.test(v.body + v.subject) && !(await confirmModal('Placeholders remain', 'The text still contains [square-bracket placeholders]. Send anyway?', 'Send anyway', true))) return;
   const n = await segmentCount(c);
   if (!(await confirmModal('Send now?', `<b>"${esc(v.subject)}"</b> will go to <b>${n.toLocaleString()} readers</b> right now. This cannot be undone.`, `Yes, send to ${n}`))) return;
-  busy(btn, true, 'Sending'); try { await api(`/campaigns/${id}/send`, { confirm: 'SEND' }); toast('On its way.'); editorState.id = null; } catch (e) { showMsg('ed-err', e.message); } finally { busy(btn, false); }
+  busy(btn, true, 'Sending'); try { const r = await api(`/campaigns/${id}/send`, { confirm: 'SEND' }); toast(r.paused ? `Started, then paused: your email provider's daily limit was reached. Ink resumes automatically ${fmtDateTime(r.pausedUntil)}.` : 'On its way.', r.paused ? 8000 : 2600); editorState.id = null; } catch (e) { showMsg('ed-err', e.message); } finally { busy(btn, false); }
 };
 ink.schedule = async (id, btn) => {
   await saveEditor(id); hideMsg('ed-err'); const v = editorValues(); const d = $('ed-date').value, t = $('ed-time').value || '09:00';
@@ -704,6 +706,7 @@ ink.schedule = async (id, btn) => {
   if (!(await confirmModal('Approve & schedule?', `<b>"${esc(v.subject)}"</b> goes to <b>${n.toLocaleString()} readers</b> on <b>${at.toLocaleString('en-IE', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}</b>. You can cancel any time before then.`, 'Approve'))) return;
   busy(btn, true, ''); try { await api(`/campaigns/${id}/schedule`, { at: at.toISOString() }); const s = S.suggestions.find(x => x.campaignId === id); if (s) updateDoc(aDoc('suggestions', s.id), { status: 'approved', resolvedAt: nowIso() }); toast('Scheduled.'); editorState.id = null; } catch (e) { showMsg('ed-err', e.message); } finally { busy(btn, false); }
 };
+ink.retrySend = async (id, btn) => { busy(btn, true, ''); try { const r = await api(`/campaigns/${id}/retry`, {}); toast(r.paused ? `Queued ${r.queued} readers, paused at the provider limit — resumes ${fmtDateTime(r.pausedUntil)}.` : `Sending to ${r.queued} readers.`, 6000); editorState.id = null; } catch (e) { toast(e.message, 6000); busy(btn, false); } };
 ink.unschedule = async (id) => { try { await api(`/campaigns/${id}/unschedule`, {}); editorState.id = null; toast('Back to draft.'); } catch (e) { toast(e.message, 5000); } };
 ink.deleteCampaign = async (id) => { if (!(await confirmModal('Delete this draft?', 'It cannot be recovered.', 'Delete', true))) return; const c = S.campaigns.find(x => x.id === id); if (c?.planId && c.planItemId) await updatePlanItem(c.planId, c.planItemId, { status: 'upcoming', campaignId: null }); await deleteDoc(aDoc('campaigns', id)); location.hash = '#campaigns'; };
 
