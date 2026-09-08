@@ -222,11 +222,87 @@
   @keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:none} }
   .fade { animation:fadeIn .3s ease; }
   #loading { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; color:var(--brass); letter-spacing:.4em; font-family:var(--serif); z-index:99; background:var(--ink); }
+  /* Folio handoff banner — appears at top of app when Ink is opened
+     from Folio's "Announce in Ink" button. Self-contained; doesn't
+     interfere with the app's own layout. */
+  #folioHandoff{position:sticky;top:0;z-index:80;background:linear-gradient(180deg,rgba(201,140,42,0.14),rgba(201,140,42,0.04));border-bottom:1px solid rgba(201,140,42,0.35);padding:14px 22px;font-family:var(--sans,system-ui,sans-serif);color:var(--text,#1a1611);display:none}
+  #folioHandoff h3{margin:0 0 4px;font-family:var(--serif,Georgia,serif);font-size:16px;font-weight:600}
+  #folioHandoff .sub{font-size:12.5px;color:var(--muted,#5a5347);margin:0 0 10px}
+  #folioHandoff .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 14px;font-size:12.5px;margin:8px 0 12px}
+  @media (max-width:600px){#folioHandoff .grid{grid-template-columns:1fr}}
+  #folioHandoff .grid label{color:var(--muted,#5a5347);font-weight:500;display:block;margin-bottom:2px;font-size:11px;text-transform:uppercase;letter-spacing:.05em}
+  #folioHandoff .grid .val{background:rgba(255,255,255,0.55);padding:6px 8px;border-radius:5px;font-family:ui-monospace,Menlo,monospace;font-size:11.5px;word-break:break-word;line-height:1.4;max-height:60px;overflow-y:auto;cursor:pointer;border:.5px solid rgba(0,0,0,0.08)}
+  #folioHandoff .grid .val:hover{border-color:rgba(201,140,42,0.5)}
+  #folioHandoff .acts{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  #folioHandoff .btn{padding:6px 12px;font-size:12px;border-radius:6px;cursor:pointer;font-family:inherit;font-weight:500}
+  #folioHandoff .btn.primary{background:#c98c2a;color:#fff;border:0}
+  #folioHandoff .btn.ghost{background:transparent;color:var(--text,#1a1611);border:.5px solid rgba(0,0,0,0.14)}
+  #folioHandoff .close{margin-left:auto;background:none;border:0;font-size:18px;line-height:1;color:var(--muted,#5a5347);cursor:pointer;padding:0 6px}
 </style>
 </head>
 <body>
 
 <div id="loading">✦ ✦ ✦</div>
+
+<!-- Folio → Ink handoff banner. Rendered/hidden by the small script
+     below based on the ?ink_folio= query param. Copy-paste ready
+     fields make it easy for the author to draft their launch email
+     without any deep integration into Ink's compose flow. -->
+<div id="folioHandoff">
+  <button class="close" onclick="document.getElementById('folioHandoff').style.display='none'">×</button>
+  <h3>📮 Announce your new folio</h3>
+  <p class="sub" id="folioHandoffSub">You just published on Folio. Here's what you need to tell your list — click any field to copy.</p>
+  <div class="grid" id="folioHandoffFields"></div>
+  <div class="acts">
+    <a class="btn primary" id="folioHandoffCompose" href="#compose">Open compose →</a>
+    <button class="btn ghost" onclick="document.getElementById('folioHandoff').style.display='none'">Later</button>
+  </div>
+</div>
+
+<script>
+/* Standalone Folio → Ink handoff receiver. Runs before Firebase +
+   the app boot so the banner is ready the moment the author lands.
+   Self-contained: no dependency on Ink's state, router, or Firestore.
+   Just parses the URL param, populates the banner, and hangs a
+   window._folioAnnounce blob for future integration when the
+   compose form knows how to consume it. */
+(function () {
+  try {
+    var p = new URLSearchParams(location.search);
+    var raw = p.get('ink_folio');
+    if (!raw) return;
+    var json;
+    try { json = JSON.parse(decodeURIComponent(escape(atob(raw)))); }
+    catch (_) { return; }
+    if (!json || typeof json !== 'object') return;
+    window._folioAnnounce = json;
+    // Clean the URL so a refresh doesn't re-trigger the banner if the
+    // user dismissed it. Uses history.replaceState to avoid a page
+    // reload; falls back gracefully in ancient browsers.
+    try { history.replaceState({}, '', location.pathname + location.hash); } catch (_) {}
+    document.addEventListener('DOMContentLoaded', function () {
+      var banner = document.getElementById('folioHandoff');
+      var fields = document.getElementById('folioHandoffFields');
+      var sub = document.getElementById('folioHandoffSub');
+      if (!banner || !fields) return;
+      var titleTxt = json.title ? ('"' + json.title + '"' + (json.author ? ' by ' + json.author : '')) : 'your new folio';
+      sub.textContent = 'You just published ' + titleTxt + ' on Folio. Copy these into a compose draft (or paste them into an AI-drafted letter for your voice).';
+      function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+      var rows = [
+        { label: 'Title',     val: json.title || '' },
+        { label: 'Author',    val: json.author || '' },
+        { label: 'Reader URL',val: json.readerUrl || '' },
+        { label: 'Blurb',     val: json.blurb || '' },
+      ];
+      if (json.cover) rows.push({ label: 'Cover URL', val: json.cover });
+      fields.innerHTML = rows.filter(function(r){return r.val;}).map(function(r){
+        return '<div><label>' + esc(r.label) + '</label><div class="val" title="Click to copy" onclick="navigator.clipboard&&navigator.clipboard.writeText(this.textContent).then(function(){var o=event.target;var t=o.textContent;o.textContent=\'✓ Copied\';setTimeout(function(){o.textContent=t;},1200);})">' + esc(r.val) + '</div></div>';
+      }).join('');
+      banner.style.display = 'block';
+    });
+  } catch (_) { /* silent */ }
+})();
+</script>
 
 <!-- ═══════════ AUTH ═══════════ -->
 <div id="auth" class="hidden">

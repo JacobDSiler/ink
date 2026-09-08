@@ -1,4 +1,4 @@
-// Combined rules for Boxes app + Folio Projects app + Ink
+// Combined rules for Boxes + Folio + Ink — ONE file, deployed by every repo to miscellaneous-117e9
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -738,18 +738,68 @@ service cloud.firestore {
       allow write: if false;  // worker-only via service account
     }
 
-    /* ---------------------------------------------------------
+    // ───────────────────────────────────────────────────────────────
+    // AUTHOR DIRECTORY + SWAP BOARD (2026-09)
+    // ───────────────────────────────────────────────────────────────
+    // Opt-in author directory — one doc per author who joins. Public
+    // read (anyone can browse the directory); write is limited to the
+    // owning uid so no author can edit another's card. Deletes stay
+    // owner-only so someone can un-list themselves at any time.
+    match /folio_guild_directory/{uid} {
+      allow read: if true;
+      // Owner: full control. Admin: update (hide/unhide + moderation
+      // stamps) + delete for moderation. The admin bypass lands the
+      // /admin/authors/ page's Hide + Delete actions.
+      allow create: if isUser(uid);
+      allow update, delete: if isUser(uid) || isAdmin();
+    }
+    // Swap board — public read. Author + admin can update/delete.
+    // Anyone signed in can create.
+    match /folio_guild_swaps/{swapId} {
+      allow read: if true;
+      allow create: if request.auth != null
+        && isUser(request.resource.data.authorUid);
+      allow update, delete: if request.auth != null
+        && (isUser(resource.data.authorUid) || isAdmin());
+      // Replies on a swap post. Anyone signed in creates; author + admin
+      // edit/delete their own.
+      match /replies/{replyId} {
+        allow read: if true;
+        allow create: if request.auth != null
+          && isUser(request.resource.data.authorUid);
+        allow update, delete: if request.auth != null
+          && (isUser(resource.data.authorUid) || isAdmin());
+      }
+    }
+
+    /* =========================================================
      * INK — author list marketing (ink.jacobsiler.com)
-     * ---------------------------------------------------------
-     * Each author owns their own subtree under /authors/{uid}.
-     * The Ink Worker (ink-worker) uses a service account, which
-     * bypasses these rules, for everything else: sending jobs,
-     * schedules, welcome-series runs, the Resend email index, and
-     * public join/unsubscribe/approve pages. None of these paths
-     * are used by Folio or Beam.
-     * --------------------------------------------------------- */
+     * =========================================================
+     * DO NOT REMOVE. This block is shared with the Ink repo
+     * (C:\dev\ink\firestore.rules). Boxes, Folio and Ink all deploy
+     * the SAME rules file to project miscellaneous-117e9, so every
+     * repo's copy must contain every app's block. When you change
+     * rules in one repo, copy the whole file to the others.
+     *
+     * Each author owns their own subtree under /authors/{uid}. The
+     * Ink Worker (ink-worker) uses a service account, which bypasses
+     * these rules, for everything else: sending jobs, schedules,
+     * welcome-series runs, the email index, public join/unsubscribe/
+     * approve pages, and paid-feature entitlements. None of these
+     * paths are used by Folio or Beam.
+     * ========================================================= */
+    // Fields on /authors/{uid} that only the Worker may set. Authors can
+    // read them but any client write that touches them is rejected.
+    function inkWorkerOnlyFields() {
+      return ['entitlements', 'plan', 'billing', 'customDomain', 'totalSent'];
+    }
     match /authors/{uid} {
-      allow read, write: if isUser(uid);
+      allow read:   if isUser(uid);
+      allow create: if isUser(uid)
+                    && !request.resource.data.keys().hasAny(inkWorkerOnlyFields());
+      allow update: if isUser(uid)
+                    && !request.resource.data.diff(resource.data).affectedKeys().hasAny(inkWorkerOnlyFields());
+      allow delete: if false;
 
       // subscribers, campaigns, plans, suggestions, automations, metricsDaily
       match /{collection}/{doc} {
@@ -759,6 +809,11 @@ service cloud.firestore {
       match /campaigns/{cid}/recipients/{sid} {
         allow read:  if isUser(uid);
         allow write: if false;
+      }
+      // Secrets the author hands Ink (e.g. their own Resend API key,
+      // stored encrypted by the Worker). Never readable from a browser.
+      match /private/{doc} {
+        allow read, write: if false;
       }
     }
     // Sign-up slug → uid reverse index. Written by the Worker when an
@@ -770,9 +825,12 @@ service cloud.firestore {
     }
     // Worker-only root collections (service account bypasses rules).
     match /jobs/{id}           { allow read, write: if false; }
+    match /jobs/{id}/q/{chunk} { allow read, write: if false; }
     match /schedule/{id}       { allow read, write: if false; }
     match /automationRuns/{id} { allow read, write: if false; }
     match /emailIndex/{id}     { allow read, write: if false; }
+    match /meta/{id}           { allow read, write: if false; }
+    /* ===================== end INK block ===================== */
 
     // Anything not matched above is denied by default.
   }

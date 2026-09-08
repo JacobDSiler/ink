@@ -27,6 +27,10 @@ crons = ["*/5 * * * *"]
 FIREBASE_PROJECT_ID = "miscellaneous-117e9"
 FIREBASE_WEB_API_KEY = "AIzaSyDxLI57pgS9WX1ekMerbcx8M6aVeWacpy0"
 GEMINI_MODEL = "gemini-2.5-flash"
+# Which provider sends on the shared domain: "cloudflare" (needs the send_email binding above AND the domain
+# onboarded under Email > Email Service) or "resend". Ink falls back to Resend automatically for an hour if
+# Cloudflare reports the domain is not onboarded, but set this to "resend" explicitly until onboarding is done.
+EMAIL_PROVIDER = "resend"
 # Shared sending domain for Resend sends (only used if the Cloudflare binding is absent). Authors send as penname@this-domain.
 INK_FROM_DOMAIN = "mail.ink.jacobsiler.com"
 # Shared sending domain for Cloudflare Email Service sends: the domain onboarded in Email Service.

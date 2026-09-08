@@ -295,10 +295,17 @@ async function resendDomainStatus(env, d) {
   }
   return { r, d };
 }
+// Cloudflare Email Service answers "could not find account config for sending domain" (or similar) when the
+// binding exists but the sending domain has not been onboarded under Email > Email Service. When that happens
+// and Resend is configured, Ink falls back to Resend for an hour (per isolate) instead of failing the send.
+const CF_CONFIG_RE = /account config|sending domain|not (been )?onboard|domain (is )?not (found|verified|configured)|no such domain/i;
+let cfUnavailableUntil = 0;
+function cloudflareUsable(env) { return !!env.EMAIL && (env.EMAIL_PROVIDER || 'cloudflare') === 'cloudflare' && Date.now() > cfUnavailableUntil; }
 function providerFor(env, author) {
   if (hasOwnDomain(author) && env.RESEND_API_KEY) return 'resend';
-  if (env.EMAIL && (env.EMAIL_PROVIDER || 'cloudflare') === 'cloudflare') return 'cloudflare';
+  if (cloudflareUsable(env)) return 'cloudflare';
   if (env.RESEND_API_KEY) return 'resend';
+  if (env.EMAIL) throw new HttpError(503, 'Cloudflare Email Service could not send from ' + sharedDomain(env, 'cloudflare') + ': onboard that domain under Email > Email Service in the Cloudflare dashboard, or set RESEND_API_KEY so Ink can fall back to Resend.');
   throw new HttpError(503, 'No email provider is configured: enable Cloudflare Email Service (send_email binding) or set RESEND_API_KEY.');
 }
 function sharedDomain(env, provider) { return provider === 'cloudflare' ? (env.CF_FROM_DOMAIN || env.INK_FROM_DOMAIN) : env.INK_FROM_DOMAIN; }
@@ -308,15 +315,26 @@ function fromAddress(env, author, provider) {
   const domain = hasOwnDomain(author) && provider === 'resend' ? author.customDomain.domain : sharedDomain(env, provider);
   return `${(author.fromName || author.penName || 'Author').replace(/["<>]/g, '')} <${local}@${domain}>`;
 }
-function inkFrom(env) { const p = env.EMAIL ? 'cloudflare' : 'resend'; return `Ink <ink@${sharedDomain(env, p)}>`; }
+function inkFrom(env) { const p = cloudflareUsable(env) ? 'cloudflare' : 'resend'; return `Ink <ink@${sharedDomain(env, p)}>`; }
 
 const LIMIT_RE = /429|rate limit|quota|daily|limit/i;
 const SUPPRESS_RE = /suppress|E_RECIPIENT_SUPPRESSED|bounce/i;
 /** Send one message via the chosen provider. Returns { id, provider }. Throws with provider message. */
 async function deliverOne(env, payload, provider) {
   if (provider === 'cloudflare') {
-    const res = await env.EMAIL.send({ from: payload.from, to: payload.to[0], replyTo: payload.reply_to || undefined, subject: payload.subject, html: payload.html, text: payload.text, headers: payload.headers || {} });
-    return { id: (res && (res.messageId || res.id)) || null, provider };
+    try {
+      const res = await env.EMAIL.send({ from: payload.from, to: payload.to[0], replyTo: payload.reply_to || undefined, subject: payload.subject, html: payload.html, text: payload.text, headers: payload.headers || {} });
+      return { id: (res && (res.messageId || res.id)) || null, provider };
+    } catch (e) {
+      const msg = String(e && e.message || e);
+      if (!CF_CONFIG_RE.test(msg) || !env.RESEND_API_KEY) throw e;
+      console.warn('[ink] Cloudflare Email Service not ready (' + msg.slice(0, 120) + ') — falling back to Resend for 1h');
+      cfUnavailableUntil = Date.now() + 3600e3;
+      const cfDom = sharedDomain(env, 'cloudflare'), rsDom = sharedDomain(env, 'resend');
+      if (cfDom !== rsDom) payload = { ...payload, from: String(payload.from).replace('@' + cfDom, '@' + rsDom) };
+      const res = await resend(env, '/emails', payload);
+      return { id: res && res.id, provider: 'resend', fellBack: true };
+    }
   }
   const res = await resend(env, '/emails', payload);
   return { id: res && res.id, provider };
@@ -646,15 +664,15 @@ async function runSendJob(env, db, uid, cid, maxBatches = 8) {
         batch.forEach((s, i) => {
           const r = results[i]; if (!r || r.limit || r.fatal) return; // not attempted
           const id = r.id || null;
-          writes.push(db.writeSet(`authors/${uid}/campaigns/${cid}/recipients/${s.id}`, { email: s.email, resendId: id, provider, status: id ? 'sent' : (r.suppressed ? 'bounced' : 'failed'), error: r.error || null, sentAt: nowIso() }));
-          if (id) { ok++; writes.push(db.writeSet(`emailIndex/${id}`, { uid, sid: s.id, cid, kind: 'campaign', provider, at: nowIso() })); }
+          writes.push(db.writeSet(`authors/${uid}/campaigns/${cid}/recipients/${s.id}`, { email: s.email, resendId: id, provider: r.provider || provider, status: id ? 'sent' : (r.suppressed ? 'bounced' : 'failed'), error: r.error || null, sentAt: nowIso() }));
+          if (id) { ok++; writes.push(db.writeSet(`emailIndex/${id}`, { uid, sid: s.id, cid, kind: 'campaign', provider: r.provider || provider, at: nowIso() })); }
           else if (r.suppressed) { suppressed++; writes.push(db.writeSet(`authors/${uid}/subscribers/${s.id}`, { status: 'bounced', bouncedAt: nowIso(), bounceReason: 'Rejected by the email provider (suppressed address)', updatedAt: nowIso() })); }
           else failed++;
         });
         if (writes.length) await db.commitChunked(writes);
         job.sent += ok; job.failed += failed + suppressed; job.batches += 1; sentThisRun += ok + failed + suppressed;
         await countSent(db, env, ok); quota.remaining -= ok; quota.sentToday += ok;
-        const inc = {}; if (ok) inc['stats.sent'] = ok; if (ok && provider === 'cloudflare') inc['stats.delivered'] = ok; if (suppressed) inc['stats.bounced'] = suppressed;
+        const inc = {}; if (ok) inc['stats.sent'] = ok; const okCf = results.filter(r => r && r.id && (r.provider || provider) === 'cloudflare').length; if (okCf) inc['stats.delivered'] = okCf; if (suppressed) inc['stats.bounced'] = suppressed;
         if (Object.keys(inc).length) await db.increment(`authors/${uid}/campaigns/${cid}`, inc);
         if (suppressed) await db.increment(`authors/${uid}`, { subscriberCount: -suppressed });
         // A limit or a provider outage part-way through: rewind to the start of this batch (already-sent readers are

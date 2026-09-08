@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Pricing — Ink, the mailing-list studio for authors</title>
+<meta name="description" content="Ink is a mailing-list manager, sender, and marketing coach for fiction authors. Unlimited subscribers on the free tier, 25,000 sends per month. Pro and Business tiers included at no extra cost with any Folio Press subscription."/>
+<meta name="robots" content="index, follow"/>
+<link rel="canonical" href="https://ink.jacobsiler.com/pricing/"/>
+<link rel="icon" href="/favicon.ico"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<style>
+  :root{
+    --bg:#faf8f4;--surface:#fff;--text:#1a1611;--muted:#5a5347;--hint:#8a8378;
+    --border:rgba(0,0,0,0.09);--accent:#c98c2a;--accent-ui:#0d5b3e;
+    --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;
+    --serif:'Playfair Display',Georgia,serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:var(--sans);font-size:15px;line-height:1.65}
+  a{color:var(--accent-ui);text-decoration:none;border-bottom:.5px solid rgba(13,91,62,0.3)}
+  a:hover{border-bottom-color:var(--accent-ui)}
+  header{padding:22px 24px;text-align:center;background:var(--surface);border-bottom:.5px solid var(--border)}
+  header .brand{display:inline-flex;align-items:center;gap:10px;font-family:var(--serif);font-size:22px;font-weight:600;color:var(--text);border:0}
+  header .brand-mark{width:32px;height:32px;border-radius:8px;background:var(--accent);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:600;font-family:var(--serif)}
+  main{max-width:960px;margin:0 auto;padding:44px 22px 60px}
+  .hero{text-align:center;margin-bottom:44px}
+  .eyebrow{display:inline-block;font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-weight:600;margin-bottom:12px}
+  h1{font-family:var(--serif);font-size:42px;font-weight:600;margin:0 0 12px;line-height:1.12;letter-spacing:-0.01em}
+  .lead{font-size:16.5px;color:var(--muted);margin:0 auto;max-width:600px;line-height:1.65}
+  .tiers{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin:14px 0 44px}
+  @media (max-width:760px){.tiers{grid-template-columns:1fr}}
+  .tier{background:var(--surface);border:.5px solid var(--border);border-radius:14px;padding:26px 24px;display:flex;flex-direction:column}
+  .tier.pro{border-color:var(--accent);position:relative;background:linear-gradient(180deg,#fffdf8 0%,var(--surface) 100%)}
+  .tier.pro::before{content:'MOST AUTHORS';position:absolute;top:-11px;left:50%;transform:translateX(-50%);background:var(--accent);color:#fff;font-size:10px;letter-spacing:.12em;padding:3px 12px;border-radius:11px;font-weight:600}
+  .tier .name{font-family:var(--serif);font-size:24px;font-weight:600;margin:0 0 4px}
+  .tier .tagline{color:var(--muted);font-size:13px;margin:0 0 16px;line-height:1.5;min-height:38px}
+  .tier .price{font-size:32px;font-weight:600;color:var(--text);margin:0}
+  .tier .price .per{font-size:14px;color:var(--muted);font-weight:400;margin-left:4px}
+  .tier .press-note{font-size:12px;color:var(--accent-ui);margin:6px 0 16px;line-height:1.5}
+  .tier .press-note a{color:var(--accent-ui);font-weight:600}
+  .tier ul{list-style:none;margin:6px 0 20px;padding:0;flex:1}
+  .tier li{padding:6px 0 6px 22px;position:relative;font-size:13.5px;line-height:1.55;color:var(--text)}
+  .tier li::before{content:'✓';position:absolute;left:0;top:6px;color:var(--accent-ui);font-weight:600}
+  .tier .feature-muted{color:var(--hint)}
+  .tier .feature-muted::before{content:'—';color:var(--hint)}
+  .btn{display:block;padding:12px 18px;font-size:14px;font-weight:500;text-align:center;text-decoration:none;border-radius:8px;font-family:inherit;border:0;cursor:pointer;border:0}
+  .btn-primary{background:var(--accent-ui);color:#fff}
+  .btn-primary:hover{background:#0a4a32;border:0}
+  .btn-ghost{background:transparent;color:var(--text);border:.5px solid rgba(0,0,0,0.14)}
+  .btn-ghost:hover{border-color:var(--accent)}
+  .press-callout{background:linear-gradient(180deg,rgba(6,95,70,0.06),rgba(6,95,70,0.02));border:.5px solid rgba(6,95,70,0.25);border-radius:14px;padding:26px 28px;margin:44px 0;text-align:center}
+  .press-callout h2{font-family:var(--serif);font-size:22px;font-weight:600;margin:0 0 6px}
+  .press-callout p{color:var(--muted);margin:0 0 14px;font-size:14.5px;line-height:1.65}
+  .fine-print{margin-top:44px;padding-top:26px;border-top:.5px solid var(--border);font-size:13px;color:var(--muted);line-height:1.7}
+  .fine-print h3{font-family:var(--serif);font-size:17px;font-weight:600;margin:22px 0 6px;color:var(--text)}
+  footer{margin-top:44px;text-align:center;font-size:12.5px;color:var(--hint)}
+  footer a{color:var(--hint);border-bottom:.5px dotted currentColor}
+</style>
+</head>
+<body>
+
+<header>
+  <a href="/" class="brand"><span class="brand-mark">i</span>Ink</a>
+</header>
+
+<main>
+  <div class="hero">
+    <div class="eyebrow">Pricing</div>
+    <h1>The tool is free.<br>You pay when your list outgrows what one person can send by hand.</h1>
+    <p class="lead">Ink helps fiction authors keep a mailing list warm without renting an over-priced enterprise tool. Unlimited subscribers on every tier. You only pay when your monthly send volume is bigger than what a solo author with a real day-job would ever hit.</p>
+  </div>
+
+  <div class="tiers">
+
+    <div class="tier">
+      <div class="name">Free</div>
+      <p class="tagline">For everyone starting a list, or growing quietly.</p>
+      <p class="price">$0<span class="per">/ month</span></p>
+      <p class="press-note">&nbsp;</p>
+      <ul>
+        <li><strong>Unlimited subscribers</strong> — import your Mailchimp list from day one</li>
+        <li><strong>25,000 sends per month</strong> — 10k subs sending twice a month, or 5k weekly</li>
+        <li>All templates + playbooks</li>
+        <li>AI-drafted campaigns from a two-line brief</li>
+        <li>Hosted sign-up page + embed</li>
+        <li>Analytics: opens, clicks, unsubscribes, chapter drop-off</li>
+        <li>One sender address</li>
+        <li class="feature-muted">Multiple sender addresses</li>
+        <li class="feature-muted">Team seats</li>
+      </ul>
+      <a href="/" class="btn btn-ghost">Start free</a>
+    </div>
+
+    <div class="tier pro">
+      <div class="name">Pro</div>
+      <p class="tagline">For authors with real traction — a launch coming up, a serial in motion.</p>
+      <p class="price">$8<span class="per">/ month</span></p>
+      <p class="press-note">✓ Included at no extra cost with <a href="https://onfolio.press/press/">Folio Press Indie ($5/mo)</a></p>
+      <ul>
+        <li><strong>Everything in Free</strong></li>
+        <li><strong>100,000 sends per month</strong> — 25k subs sending weekly</li>
+        <li><strong>5 sender addresses</strong> — send from different pen names</li>
+        <li><strong>Priority AI drafting</strong> — faster, longer responses</li>
+        <li>Custom domain for sign-up + sender</li>
+        <li>Advanced deliverability tuning</li>
+        <li class="feature-muted">Team seats</li>
+        <li class="feature-muted">API access</li>
+      </ul>
+      <a href="/" class="btn btn-primary">Start Pro trial</a>
+    </div>
+
+    <div class="tier">
+      <div class="name">Business</div>
+      <p class="tagline">For pen names running as an actual business, or authors with a team.</p>
+      <p class="price">$25<span class="per">/ month</span></p>
+      <p class="press-note">✓ Included at no extra cost with <a href="https://onfolio.press/press/">Folio Press Imprint ($12/mo)</a></p>
+      <ul>
+        <li><strong>Everything in Pro</strong></li>
+        <li><strong>Unlimited sends</strong></li>
+        <li><strong>Unlimited sender addresses</strong></li>
+        <li><strong>5 team seats</strong> — assistant + editor + designer</li>
+        <li>API access</li>
+        <li>Priority support</li>
+      </ul>
+      <a href="/" class="btn btn-ghost">Start Business trial</a>
+    </div>
+
+  </div>
+
+  <div class="press-callout">
+    <h2>Already paying for Folio Press?</h2>
+    <p>Ink Pro comes with Folio Indie. Ink Business comes with Folio Imprint. No extra fee, no separate signup — just sign in to Ink with the same Google account, and your tier unlocks automatically. Sign in, and a green <strong>✓ Folio Indie</strong> badge appears next to your name in Ink's footer once entitlements resolve.</p>
+    <p><a href="https://onfolio.press/press/" style="background:var(--accent-ui);color:#fff;padding:10px 18px;border-radius:8px;display:inline-block;font-weight:500;border:0;text-decoration:none">See Folio Press tiers →</a></p>
+  </div>
+
+  <div class="fine-print">
+    <h3>Why unlimited subscribers matter</h3>
+    <p>Mailchimp cut their free tier from 2,000 contacts to 500 in 2022. That single change forced tens of thousands of small creators to either downgrade their list, pay $20/month for a tool they weren't using at that scale, or go silent. Ink refuses to make that a business model. Bring 15,000 subscribers over from Mailchimp on your first day, no wall.</p>
+
+    <h3>What "sends per month" actually means</h3>
+    <p>One send = one email to one recipient. If your list is 5,000 people and you send a Tuesday letter, that's 5,000 sends. The 25k/month free ceiling covers a 5,000-subscriber list emailed weekly, or a 10,000-subscriber list emailed twice a month, or a 25,000-subscriber list emailed once a month. Very few solo authors bump against it. The ones who do have real income to support the $8/month Pro tier.</p>
+
+    <h3>Scholarship path for creators in real hardship</h3>
+    <p>If you're a creator in circumstances where $8/month is a genuine barrier — a language market with limited earnings, a nonprofit literacy program, or something else the pricing doesn't fit — email <a href="mailto:folio@jacobsiler.com">folio@jacobsiler.com</a> with a paragraph about your work. Pro or Business is comped for a year, no bureaucracy.</p>
+
+    <h3>What Ink doesn't do</h3>
+    <p>Ink doesn't try to be Salesforce. No behavioural scoring, no lead-magnet A/B automation, no CRM. If those matter to you, use ActiveCampaign or HubSpot. Ink is for authors who want to write good letters to their readers, on their own schedule, without a monthly SaaS bill they can't justify.</p>
+  </div>
+
+  <footer>
+    Ink — a mailing-list studio for fiction authors, by <a href="https://jacobsiler.com">Jacob Siler</a> ·
+    <a href="/">Open Ink</a> ·
+    <a href="https://onfolio.press">Folio</a> ·
+    <a href="mailto:folio@jacobsiler.com">Contact</a>
+  </footer>
+</main>
+
+</body>
+</html>
