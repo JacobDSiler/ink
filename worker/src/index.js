@@ -264,12 +264,95 @@ async function resend(env, path, body, method = 'POST') {
   if (!res.ok) throw new Error(`Resend ${path} → ${res.status}: ${data.message || text}`);
   return data;
 }
-function fromAddress(env, author) {
+// ── Provider layer: Cloudflare Email Service (shared domain) or Resend (author's own domain) ──
+function hasOwnDomain(author) { return !!(author && author.customDomain && author.customDomain.status === 'verified'); }
+
+// Ask Resend about an author's custom domain. Returns { r, d } where r is Resend's domain object and d is
+// the (possibly updated) customDomain record. Self-heals two bookkeeping problems:
+//  • the entry Ink created was deleted in the Resend dashboard → adopt a same-named entry, or throw 'gone'
+//  • the same domain exists twice on the key (Ink's entry + one added via the dashboard / "Auto configure")
+//    and only the other one is verified → adopt the verified one and delete Ink's stale duplicate.
+async function resendDomainStatus(env, d) {
+  d = { ...d };
+  const listSameName = async () => ((await resend(env, '/domains', null, 'GET').catch(() => ({ data: [] }))).data || []).filter(x => x.name === d.domain);
+  let r = null;
+  try {
+    await resend(env, `/domains/${d.resendId}/verify`, null, 'POST').catch(() => { });
+    r = await resend(env, `/domains/${d.resendId}`, null, 'GET');
+  } catch (e) {
+    if (!/404|not found/i.test(e.message)) throw e;
+    const match = (await listSameName())[0];
+    if (!match) { const err = new Error('gone'); err.gone = true; throw err; }
+    r = await resend(env, `/domains/${match.id}`, null, 'GET'); d.resendId = match.id; d.adopted = true;
+  }
+  if (r.status !== 'verified') {
+    const other = (await listSameName()).find(x => x.id !== d.resendId && x.status === 'verified');
+    if (other) {
+      const stale = d.resendId;
+      r = await resend(env, `/domains/${other.id}`, null, 'GET'); d.resendId = other.id; d.adopted = true;
+      await resend(env, `/domains/${stale}`, null, 'DELETE').catch(() => { });
+    }
+  }
+  return { r, d };
+}
+function providerFor(env, author) {
+  if (hasOwnDomain(author) && env.RESEND_API_KEY) return 'resend';
+  if (env.EMAIL && (env.EMAIL_PROVIDER || 'cloudflare') === 'cloudflare') return 'cloudflare';
+  if (env.RESEND_API_KEY) return 'resend';
+  throw new HttpError(503, 'No email provider is configured: enable Cloudflare Email Service (send_email binding) or set RESEND_API_KEY.');
+}
+function sharedDomain(env, provider) { return provider === 'cloudflare' ? (env.CF_FROM_DOMAIN || env.INK_FROM_DOMAIN) : env.INK_FROM_DOMAIN; }
+function fromAddress(env, author, provider) {
+  provider = provider || providerFor(env, author);
   const local = (author.fromLocal || author.slug || 'author').toLowerCase().replace(/[^a-z0-9.-]/g, '');
-  const domain = author.customDomain && author.customDomain.status === 'verified' ? author.customDomain.domain : env.INK_FROM_DOMAIN;
+  const domain = hasOwnDomain(author) && provider === 'resend' ? author.customDomain.domain : sharedDomain(env, provider);
   return `${(author.fromName || author.penName || 'Author').replace(/["<>]/g, '')} <${local}@${domain}>`;
 }
-function inkFrom(env) { return `Ink <ink@${env.INK_FROM_DOMAIN}>`; }
+function inkFrom(env) { const p = env.EMAIL ? 'cloudflare' : 'resend'; return `Ink <ink@${sharedDomain(env, p)}>`; }
+
+const LIMIT_RE = /429|rate limit|quota|daily|limit/i;
+const SUPPRESS_RE = /suppress|E_RECIPIENT_SUPPRESSED|bounce/i;
+/** Send one message via the chosen provider. Returns { id, provider }. Throws with provider message. */
+async function deliverOne(env, payload, provider) {
+  if (provider === 'cloudflare') {
+    const res = await env.EMAIL.send({ from: payload.from, to: payload.to[0], replyTo: payload.reply_to || undefined, subject: payload.subject, html: payload.html, text: payload.text, headers: payload.headers || {} });
+    return { id: (res && (res.messageId || res.id)) || null, provider };
+  }
+  const res = await resend(env, '/emails', payload);
+  return { id: res && res.id, provider };
+}
+/** Send many. Returns array aligned with payloads: { id } | { error, suppressed } | { limit } (stops early on a limit). */
+async function deliverMany(env, payloads, provider) {
+  if (provider === 'resend') {
+    const res = await resend(env, '/emails/batch', payloads); // throws on limit → caller handles
+    return (res.data || []).map(x => ({ id: x.id }));
+  }
+  const out = [];
+  for (const p of payloads) {
+    try { out.push(await deliverOne(env, p, provider)); }
+    catch (e) {
+      const msg = String(e && e.message || e);
+      if (LIMIT_RE.test(msg) && !SUPPRESS_RE.test(msg)) { out.push({ limit: msg }); break; }
+      if (/domain|sender|unauthori|forbidden|binding|not (been )?onboard|E_INVALID|E_SENDER|\b40[13]\b|\b5\d\d\b/i.test(msg) && !SUPPRESS_RE.test(msg)) { out.push({ fatal: msg }); break; } // config/outage: stop, do not burn the batch
+      out.push({ error: msg.slice(0, 300), suppressed: SUPPRESS_RE.test(msg) });
+    }
+  }
+  return out;
+}
+
+// ── Ink-native open/click tracking (works with every provider) ──
+async function trackSig(env, kind, uid, cid, sid, extra = '') { return (await hmac(env.INK_SIGNING_SECRET, `${kind}:${uid}:${cid}:${sid}:${extra}`)).slice(0, 20); }
+async function trackHtml(env, html, uid, cid, sid) {
+  const base = `${env.PUBLIC_URL}`;
+  const skip = (u) => !/^https?:\/\//i.test(u) || u.startsWith(base + '/u/') || u.startsWith(base + '/keep/') || u.startsWith(base + '/confirm/') || u.startsWith(base + '/approve/') || u.startsWith(base + '/r/');
+  const links = []; html.replace(/href="(https?:\/\/[^"]+)"/g, (m, u) => { if (!skip(u) && !links.includes(u)) links.push(u); return m; });
+  const map = {};
+  for (const u of links) map[u] = `${base}/r/${uid}/${cid}/${sid}/${await trackSig(env, 'clk', uid, cid, sid, u)}?u=${encodeURIComponent(u)}`;
+  let out = html.replace(/href="(https?:\/\/[^"]+)"/g, (m, u) => map[u] ? `href="${map[u]}"` : m);
+  const pixel = `<img src="${base}/o/${uid}/${cid}/${sid}/${await trackSig(env, 'opn', uid, cid, sid)}" width="1" height="1" alt="" style="display:block;width:1px;height:1px;border:0;">`;
+  out = out.includes('</body>') ? out.replace('</body>', pixel + '</body>') : out + pixel;
+  return out;
+}
 
 // ───────────────────────────────────────────────────────────────── Gemini ──
 
@@ -420,12 +503,14 @@ function renderFor(env, uid, author, sub, token, campaign) {
     vars: buildVars(env, uid, author, sub, token, campaign.trackId)
   });
 }
-function emailPayload(env, uid, author, sub, token, campaign, tags) {
+async function emailPayload(env, uid, author, sub, token, campaign, tags, provider) {
   const r = renderFor(env, uid, author, sub, token, campaign);
-  const u = unsubUrl(env, uid, sub.id || sub.sid, token, campaign.trackId);
+  const sid = sub.id || sub.sid;
+  const u = unsubUrl(env, uid, sid, token, campaign.trackId);
+  const html = campaign.trackId ? await trackHtml(env, r.html, uid, campaign.trackId, sid) : r.html;
   return {
-    from: fromAddress(env, author), to: [sub.email], reply_to: author.replyTo || author.email || undefined,
-    subject: r.subject, html: r.html, text: r.text,
+    from: fromAddress(env, author, provider), to: [sub.email], reply_to: author.replyTo || author.email || undefined,
+    subject: r.subject, html, text: r.text,
     headers: { 'List-Unsubscribe': `<${u}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' },
     tags: tags || []
   };
@@ -435,11 +520,18 @@ function emailPayload(env, uid, author, sub, token, campaign, tags) {
 async function sendSingle(env, db, uid, author, sub, campaign, { kind = 'single', track = true } = {}) {
   const sid = sub.sid || sub.id || (await subscriberId(sub.email));
   const token = await unsubToken(env, uid, sid);
-  const payload = emailPayload(env, uid, author, { ...sub, id: sid, keepToken: await keepToken(env, uid, sid) }, token, campaign, [{ name: 'kind', value: kind }]);
+  const provider = providerFor(env, author);
+  const trackId = track && kind !== 'test' && kind !== 'confirm' ? (campaign.id || `auto-${kind}`) : null;
+  const payload = await emailPayload(env, uid, author, { ...sub, id: sid, keepToken: await keepToken(env, uid, sid) }, token, { ...campaign, trackId }, [{ name: 'kind', value: kind }], provider);
   let res;
-  try { res = await resend(env, '/emails', payload); }
-  catch (e) { if (/429|rate limit|quota|daily|limit/i.test(String(e.message))) throw new HttpError(429, 'The email provider\'s sending limit has been reached for today. Campaign sends pause and resume automatically; test emails will work again when the limit resets (or after upgrading the Resend plan).'); throw e; }
-  if (track && res && res.id) await db.set(`emailIndex/${res.id}`, { uid, sid, kind, cid: campaign.id || null, at: nowIso() });
+  try { res = await deliverOne(env, payload, provider); }
+  catch (e) {
+    const msg = String(e.message || e);
+    if (SUPPRESS_RE.test(msg) && !LIMIT_RE.test(msg)) { await db.set(`authors/${uid}/subscribers/${sid}`, { status: 'bounced', bouncedAt: nowIso(), bounceReason: 'Rejected by the email provider (suppressed address)', updatedAt: nowIso() }).catch(() => { }); throw new HttpError(400, 'That address is on the provider\'s suppression list (it bounced or complained before) and cannot be sent to.'); }
+    if (LIMIT_RE.test(msg)) throw new HttpError(429, 'The email provider\'s sending limit has been reached for today. Campaign sends pause and resume automatically; test emails will work again when the limit resets.');
+    throw e;
+  }
+  if (track && res && res.id) await db.set(`emailIndex/${res.id}`, { uid, sid, kind, cid: campaign.id || null, provider, at: nowIso() });
   await countSent(db, env, 1);
   return res;
 }
@@ -533,45 +625,50 @@ async function runSendJob(env, db, uid, cid, maxBatches = 8) {
     }
     const exhausted = job.qi >= job.chunks;
     if (ids.length) {
-      // re-read the readers now: skip anyone who unsubscribed/bounced since the job was queued
-      const batch = (await db.batchGet(ids.map(id => `authors/${uid}/subscribers/${id}`))).filter(s => s.status === 'active');
+      // Re-read the readers now: skip anyone who unsubscribed/bounced since the job was queued, and anyone
+      // this campaign already reached (makes rewinding after a provider error safe — nobody gets it twice).
+      const subs = (await db.batchGet(ids.map(id => `authors/${uid}/subscribers/${id}`))).filter(s => s.status === 'active');
+      const already = new Set((await db.batchGet(subs.map(s => `authors/${uid}/campaigns/${cid}/recipients/${s.id}`))).filter(r => r.status === 'sent' || r.status === 'delivered').map(r => r.id));
+      const batch = subs.filter(s => !already.has(s.id));
       if (batch.length) {
+        const provider = providerFor(env, author);
         const payloads = [];
         for (const s of batch) {
           const token = await unsubToken(env, uid, s.id);
           s.keepToken = await keepToken(env, uid, s.id);
-          payloads.push(emailPayload(env, uid, author, s, token, { ...campaign, trackId: cid }, [{ name: 'campaign', value: cid }]));
+          payloads.push(await emailPayload(env, uid, author, s, token, { ...campaign, trackId: cid }, [{ name: 'campaign', value: cid }], provider));
         }
-        let rids = [];
-        const qiBefore = qStart.qi, qoBefore = qStart.qo;
-        try { const res = await resend(env, '/emails/batch', payloads); rids = (res.data || []).map(x => x.id); }
-        catch (e) {
-          const msg = String(e.message || '');
-          if (/429|rate limit|quota|daily|limit/i.test(msg)) {
-            // Sending limit reached (Resend plan cap or rate limit): rewind this batch and pause.
-            // Daily quota → resume after the next UTC midnight (+10 min); plain rate limit → resume in 15 minutes.
-            const daily = /daily|quota|plan/i.test(msg);
-            const until = daily ? new Date(Math.ceil(Date.now() / 864e5) * 864e5 + 10 * 60e3).toISOString() : new Date(Date.now() + 15 * 60e3).toISOString();
-            job.qi = qiBefore; job.qo = qoBefore; job.pausedUntil = until;
-            await db.set(jobPath, { qi: job.qi, qo: job.qo, pausedUntil: until, lastError: msg.slice(0, 300), updatedAt: nowIso() });
-            await db.set(`authors/${uid}/campaigns/${cid}`, { sendPausedUntil: until, sendPauseReason: daily ? 'Your email provider\'s daily sending limit was reached. Sending resumes automatically when it resets; the remaining readers will get the letter then.' : 'Sending is being rate-limited; it resumes automatically in a few minutes.', updatedAt: nowIso() });
-            return job;
-          }
-          job.failed += batch.length;
-          await db.set(jobPath, { failed: job.failed, qi: job.qi, qo: job.qo, lastError: msg.slice(0, 500), updatedAt: nowIso() });
-          continue;
-        }
-        const writes = [];
+        let results = [];
+        try { results = await deliverMany(env, payloads, provider); }
+        catch (e) { results = [{ limit: LIMIT_RE.test(String(e.message)) ? String(e.message) : null, fatal: LIMIT_RE.test(String(e.message)) ? null : String(e.message) }]; }
+        // Record everything that went out (or was rejected per-recipient) before deciding what to do next.
+        const writes = []; let ok = 0, suppressed = 0, failed = 0;
         batch.forEach((s, i) => {
-          const id = rids[i] || null;
-          writes.push(db.writeSet(`authors/${uid}/campaigns/${cid}/recipients/${s.id}`, { email: s.email, resendId: id, status: id ? 'sent' : 'failed', sentAt: nowIso() }));
-          if (id) writes.push(db.writeSet(`emailIndex/${id}`, { uid, sid: s.id, cid, kind: 'campaign', at: nowIso() }));
+          const r = results[i]; if (!r || r.limit || r.fatal) return; // not attempted
+          const id = r.id || null;
+          writes.push(db.writeSet(`authors/${uid}/campaigns/${cid}/recipients/${s.id}`, { email: s.email, resendId: id, provider, status: id ? 'sent' : (r.suppressed ? 'bounced' : 'failed'), error: r.error || null, sentAt: nowIso() }));
+          if (id) { ok++; writes.push(db.writeSet(`emailIndex/${id}`, { uid, sid: s.id, cid, kind: 'campaign', provider, at: nowIso() })); }
+          else if (r.suppressed) { suppressed++; writes.push(db.writeSet(`authors/${uid}/subscribers/${s.id}`, { status: 'bounced', bouncedAt: nowIso(), bounceReason: 'Rejected by the email provider (suppressed address)', updatedAt: nowIso() })); }
+          else failed++;
         });
-        await db.commitChunked(writes);
-        const ok = rids.filter(Boolean).length;
-        job.sent += ok; job.failed += batch.length - ok; job.batches += 1; sentThisRun += batch.length;
+        if (writes.length) await db.commitChunked(writes);
+        job.sent += ok; job.failed += failed + suppressed; job.batches += 1; sentThisRun += ok + failed + suppressed;
         await countSent(db, env, ok); quota.remaining -= ok; quota.sentToday += ok;
-        await db.increment(`authors/${uid}/campaigns/${cid}`, { 'stats.sent': ok });
+        const inc = {}; if (ok) inc['stats.sent'] = ok; if (ok && provider === 'cloudflare') inc['stats.delivered'] = ok; if (suppressed) inc['stats.bounced'] = suppressed;
+        if (Object.keys(inc).length) await db.increment(`authors/${uid}/campaigns/${cid}`, inc);
+        if (suppressed) await db.increment(`authors/${uid}`, { subscriberCount: -suppressed });
+        // A limit or a provider outage part-way through: rewind to the start of this batch (already-sent readers are
+        // skipped on retry) and pause — daily limits until the next UTC day, rate limits 15 min, outages 30 min.
+        const stop = results.find(r => r && (r.limit || r.fatal));
+        if (stop) {
+          const msg = String(stop.limit || stop.fatal);
+          const daily = !!stop.limit && /daily|quota|plan/i.test(msg);
+          const until = daily ? nextUtcDay() : new Date(Date.now() + (stop.limit ? 15 : 30) * 60e3).toISOString();
+          job.qi = qStart.qi; job.qo = qStart.qo; job.pausedUntil = until;
+          await db.set(jobPath, { sent: job.sent, failed: job.failed, qi: job.qi, qo: job.qo, pausedUntil: until, lastError: msg.slice(0, 300), updatedAt: nowIso() });
+          await db.set(`authors/${uid}/campaigns/${cid}`, { sendPausedUntil: until, sendPauseReason: daily ? 'Your email provider\'s daily sending limit was reached. Sending resumes automatically when it resets; the remaining readers will get the letter then.' : stop.limit ? 'Sending is being rate-limited; it resumes automatically in a few minutes.' : `The email provider returned an error (${msg.slice(0, 120)}). Ink will retry automatically; if this keeps happening, check the Inbox placement card in Settings.`, updatedAt: nowIso() });
+          return job;
+        }
       }
       await db.set(jobPath, { sent: job.sent, failed: job.failed, batches: job.batches, qi: job.qi, qo: job.qo, pausedUntil: null, updatedAt: nowIso() });
       if (campaign.sendPausedUntil) { campaign.sendPausedUntil = null; await db.set(`authors/${uid}/campaigns/${cid}`, { sendPausedUntil: null, sendPauseReason: null }); }
@@ -710,7 +807,8 @@ function inkMail(env, author, title, paragraphs, actions) {
 async function emailAuthor(env, author, title, paragraphs, actions = []) {
   if (!author.email) return;
   const r = inkMail(env, author, title, paragraphs, actions);
-  await resend(env, '/emails', { from: inkFrom(env), to: [author.email], subject: r.subject, html: r.html, text: r.text, tags: [{ name: 'kind', value: 'nudge' }] });
+  const provider = env.EMAIL ? 'cloudflare' : 'resend';
+  await deliverOne(env, { from: inkFrom(env), to: [author.email], subject: r.subject, html: r.html, text: r.text, headers: {}, tags: [{ name: 'kind', value: 'nudge' }] }, provider);
 }
 
 async function approveLink(env, uid, cid, mode) {
@@ -833,56 +931,68 @@ async function verifySvix(request, rawBody, secret) {
   return sigs.split(' ').some(s => { const [v, val] = s.split(','); return v === 'v1' && val && timingSafeEqual(val, sig); });
 }
 
-async function handleResendEvent(env, db, evt) {
-  const type = evt.type || ''; const emailId = evt.data && (evt.data.email_id || evt.data.id);
-  if (!emailId) return;
-  const idx = await db.get(`emailIndex/${emailId}`);
-  if (!idx) return;
-  const { uid, sid, cid } = idx; const t = evt.created_at || nowIso(); const day = t.slice(0, 10);
+/** Apply one engagement/delivery event. cid may be a campaign id or an automation tag (auto-*). */
+async function applyEvent(env, db, { uid, cid, sid, type, at, url, reason }) {
+  const t = at || nowIso(); const day = t.slice(0, 10);
+  const isCampaign = cid && !String(cid).startsWith('auto-');
   const subPath = `authors/${uid}/subscribers/${sid}`;
-  const recPath = cid ? `authors/${uid}/campaigns/${cid}/recipients/${sid}` : null;
-  const campPath = cid ? `authors/${uid}/campaigns/${cid}` : null;
+  const recPath = isCampaign ? `authors/${uid}/campaigns/${cid}/recipients/${sid}` : null;
+  const campPath = isCampaign ? `authors/${uid}/campaigns/${cid}` : null;
   const rec = recPath ? await db.get(recPath) : null;
+  if (recPath && !rec) return; // unknown recipient for this campaign — ignore
   const inc = {}; const recPatch = {}; const subPatch = { updatedAt: nowIso() }; const dayInc = {};
   switch (type) {
-    case 'email.delivered': if (rec && !rec.deliveredAt) { inc['stats.delivered'] = 1; recPatch.deliveredAt = t; recPatch.status = 'delivered'; } break;
-    case 'email.opened':
+    case 'delivered': if (rec && !rec.deliveredAt) { inc['stats.delivered'] = 1; recPatch.deliveredAt = t; recPatch.status = 'delivered'; } break;
+    case 'opened':
       inc['stats.opened'] = 1; dayInc.opens = 1; subPatch.lastOpenAt = t;
       if (rec && !rec.openedAt) { inc['stats.uniqueOpens'] = 1; recPatch.openedAt = t; }
-      recPatch.opens = (rec?.opens || 0) + 1;
+      if (rec) recPatch.opens = (rec.opens || 0) + 1;
       await db.increment(subPath, { opens: 1 });
       break;
-    case 'email.clicked':
+    case 'clicked':
       inc['stats.clicked'] = 1; dayInc.clicks = 1; subPatch.lastClickAt = t;
       if (rec && !rec.clickedAt) { inc['stats.uniqueClicks'] = 1; recPatch.clickedAt = t; }
-      recPatch.clicks = (rec?.clicks || 0) + 1; recPatch.lastUrl = evt.data.click?.link || '';
+      if (rec) { recPatch.clicks = (rec.clicks || 0) + 1; recPatch.lastUrl = url || ''; }
       await db.increment(subPath, { clicks: 1 });
       break;
-    case 'email.bounced':
+    case 'bounced':
       inc['stats.bounced'] = 1; recPatch.status = 'bounced'; recPatch.bouncedAt = t;
-      subPatch.status = 'bounced'; subPatch.bouncedAt = t; subPatch.bounceReason = (evt.data.bounce && evt.data.bounce.message) || '';
+      subPatch.status = 'bounced'; subPatch.bouncedAt = t; subPatch.bounceReason = reason || '';
       dayInc.bounced = 1; await db.increment(`authors/${uid}`, { subscriberCount: -1 });
       break;
-    case 'email.complained':
+    case 'complained':
       inc['stats.complained'] = 1; recPatch.status = 'complained';
       subPatch.status = 'complained'; subPatch.unsubscribedAt = t; dayInc.unsubscribed = 1;
       await db.increment(`authors/${uid}`, { subscriberCount: -1 });
       break;
-    case 'email.delivery_delayed': recPatch.delayed = true; break;
+    case 'delayed': recPatch.delayed = true; break;
     default: return;
   }
   const writes = [];
   if (recPath && Object.keys(recPatch).length) writes.push(db.writeSet(recPath, recPatch));
   writes.push(db.writeSet(subPath, subPatch));
-  if (writes.length) await db.commit(writes);
+  await db.commit(writes);
   if (campPath && Object.keys(inc).length) await db.increment(campPath, inc);
   if (Object.keys(dayInc).length) await db.increment(`authors/${uid}/metricsDaily/${day}`, dayInc);
 }
 
+/** Resend webhook → delivery events only. Opens/clicks come from Ink's own tracking, so Resend's are ignored (no double counting). */
+async function handleResendEvent(env, db, evt) {
+  const type = evt.type || ''; const emailId = evt.data && (evt.data.email_id || evt.data.id);
+  if (!emailId) return;
+  const idx = await db.get(`emailIndex/${emailId}`);
+  if (!idx) return;
+  const map = { 'email.delivered': 'delivered', 'email.bounced': 'bounced', 'email.complained': 'complained', 'email.delivery_delayed': 'delayed' };
+  if (!map[type]) return;
+  await applyEvent(env, db, { uid: idx.uid, cid: idx.cid, sid: idx.sid, type: map[type], at: evt.created_at || nowIso(), reason: evt.data.bounce && evt.data.bounce.message });
+}
+
+const GIF = Uint8Array.from([71, 73, 70, 56, 57, 97, 1, 0, 1, 0, 128, 0, 0, 0, 0, 0, 255, 255, 255, 33, 249, 4, 1, 0, 0, 0, 0, 44, 0, 0, 0, 0, 1, 0, 1, 0, 0, 2, 2, 68, 1, 0, 59]);
+
 // ─────────────────────────────────────────────────────────────── router ──
 
-const REQUIRED_SECRETS = ['RESEND_API_KEY', 'GEMINI_API_KEY', 'INK_SIGNING_SECRET'];
-function missingConfig(env) { const m = REQUIRED_SECRETS.filter(k => !env[k]); if (!env.FIREBASE_SERVICE_ACCOUNT && !env.FIREBASE_SERVICE_ACCOUNT_B64) m.unshift('FIREBASE_SERVICE_ACCOUNT_B64'); return m; }
+const REQUIRED_SECRETS = ['GEMINI_API_KEY', 'INK_SIGNING_SECRET'];
+function missingConfig(env) { const m = REQUIRED_SECRETS.filter(k => !env[k]); if (!env.FIREBASE_SERVICE_ACCOUNT && !env.FIREBASE_SERVICE_ACCOUNT_B64) m.unshift('FIREBASE_SERVICE_ACCOUNT_B64'); if (!env.EMAIL && !env.RESEND_API_KEY) m.push('RESEND_API_KEY (or the Cloudflare send_email binding)'); return m; }
 
 async function route(request, env, ctx) {
   const url = new URL(request.url);
@@ -949,6 +1059,22 @@ async function route(request, env, ctx) {
     return html(pageShell('Unsubscribe', `<div class="pen">${escapeHtml(author.penName || '')}</div><h1>Unsubscribe?</h1><p>Stop receiving letters from ${escapeHtml(author.penName || 'this author')} at <strong>${escapeHtml(sub.email)}</strong>.</p><form method="POST"><button type="submit">Yes, unsubscribe me</button></form>`, author.brand));
   }
 
+  if ((parts[0] === 'o' || parts[0] === 'r') && parts[4]) {
+    const [kind, uid, cid, sid, sig] = parts;
+    const target = kind === 'r' ? (url.searchParams.get('u') || '') : '';
+    const expect = await trackSig(env, kind === 'o' ? 'opn' : 'clk', uid, cid, sid, target);
+    const valid = timingSafeEqual(sig, expect);
+    if (kind === 'o') {
+      if (valid) ctx.waitUntil(applyEvent(env, db, { uid, cid, sid, type: 'opened' }).catch(e => console.error('open', e.message)));
+      return new Response(GIF, { headers: { 'Content-Type': 'image/gif', 'Cache-Control': 'no-store, no-cache, must-revalidate, private', Pragma: 'no-cache', Expires: '0' } });
+    }
+    if (!valid || !/^https?:\/\//i.test(target)) return html(pageShell('Invalid link', '<h1>Invalid link</h1>'), 400);
+    // Ignore automated link scanners (they prefetch): only count clicks from browsers that look like a person.
+    const ua = request.headers.get('User-Agent') || '';
+    if (!/bot|crawler|spider|scanner|preview|Barracuda|Proofpoint|Mimecast|GoogleImageProxy/i.test(ua)) ctx.waitUntil(applyEvent(env, db, { uid, cid, sid, type: 'clicked', url: target }).catch(e => console.error('click', e.message)));
+    return Response.redirect(target, 302);
+  }
+
   if (parts[0] === 'keep' && parts[3]) {
     const [, uid, sid, token] = parts;
     const expect = await keepToken(env, uid, sid);
@@ -998,7 +1124,7 @@ async function route(request, env, ctx) {
   author.accountEmail = user.email;
   const body = m === 'POST' || m === 'PUT' ? await readBody(request) : {};
 
-  if (path === '/me' && m === 'GET') { const q = await dailyQuota(db, env); return json({ ok: true, user, author, publicUrl: env.PUBLIC_URL, fromAddress: fromAddress(env, author), fromDomain: env.INK_FROM_DOMAIN, dailyCap: q.cap, sentToday: q.sentToday, remainingToday: q.cap ? q.remaining : null }); }
+  if (path === '/me' && m === 'GET') { const q = await dailyQuota(db, env); const prov = providerFor(env, author); return json({ ok: true, user, author, publicUrl: env.PUBLIC_URL, fromAddress: fromAddress(env, author, prov), fromDomain: sharedDomain(env, prov), provider: prov, customDomainsAvailable: !!env.RESEND_API_KEY, dailyCap: q.cap, sentToday: q.sentToday, remainingToday: q.cap ? q.remaining : null }); }
 
   if (path === '/me/slug' && m === 'POST') {
     const slug = String(body.slug || '').toLowerCase().trim().replace(/[^a-z0-9-]/g, '');
@@ -1116,7 +1242,8 @@ async function route(request, env, ctx) {
 
   if (path === '/deliverability' && m === 'GET') {
     const cd = author.customDomain; const verified = cd && cd.status === 'verified';
-    const domain = verified ? cd.domain : env.INK_FROM_DOMAIN;
+    const prov = providerFor(env, author);
+    const domain = verified && prov === 'resend' ? cd.domain : sharedDomain(env, prov);
     const orgDomain = domain.split('.').slice(-2).join('.');
     const doh = async (name, type) => { try { const r = await (await fetch(`https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(name)}&type=${type}`, { headers: { accept: 'application/dns-json' } })).json(); return (r.Answer || []).map(a => String(a.data).replace(/^"|"$/g, '')); } catch { return []; } };
     const [mx, spf, dkim, dmarcSub, dmarcOrg] = await Promise.all([doh(`send.${domain}`, 'MX'), doh(`send.${domain}`, 'TXT'), doh(`resend._domainkey.${domain}`, 'TXT'), doh(`_dmarc.${domain}`, 'TXT'), doh(`_dmarc.${orgDomain}`, 'TXT')]);
@@ -1126,8 +1253,10 @@ async function route(request, env, ctx) {
     const tot = sent.reduce((a, c) => { const st = c.stats || {}; a.sent += st.sent || 0; a.bounced += st.bounced || 0; a.complained += st.complained || 0; a.opens += st.uniqueOpens || 0; return a; }, { sent: 0, bounced: 0, complained: 0, opens: 0 });
     const total = author.totalSent || 0;
     const stage = total < 500 ? 'warming' : total < 2000 ? 'building' : 'established';
-    return json({ ok: true, domain, usingOwnDomain: !!verified, checks: {
-      spf: spf.some(x => /v=spf1/i.test(x)) && mx.length > 0, dkim: dkim.some(x => /p=/.test(x)), dmarc: !!dmarc, dmarcPolicy: policy, dmarcRecord: { name: `_dmarc.${domain}`, value: `v=DMARC1; p=none; rua=mailto:${author.replyTo || author.email || ''}` },
+    const cfDkim = prov === 'cloudflare' ? await doh(`cf-bounce._domainkey.${orgDomain}`, 'TXT') : [];
+    const cfSpf = prov === 'cloudflare' ? await doh(`cf-bounce.${orgDomain}`, 'TXT') : [];
+    return json({ ok: true, domain, provider: prov, usingOwnDomain: !!verified && prov === 'resend', checks: {
+      spf: prov === 'cloudflare' ? cfSpf.some(x => /v=spf1/i.test(x)) || spf.some(x => /v=spf1/i.test(x)) : (spf.some(x => /v=spf1/i.test(x)) && mx.length > 0), dkim: prov === 'cloudflare' ? cfDkim.some(x => /p=/.test(x)) || dkim.some(x => /p=/.test(x)) : dkim.some(x => /p=/.test(x)), dmarc: !!dmarc, dmarcPolicy: policy, dmarcRecord: { name: `_dmarc.${domain}`, value: `v=DMARC1; p=none; rua=mailto:${author.replyTo || author.email || ''}` },
       postalAddress: !!author.postalAddress, replyTo: !!(author.replyTo || author.email), unsubscribe: true, plainText: true,
       bounceRate: tot.sent ? tot.bounced / tot.sent : 0, complaintRate: tot.sent ? tot.complained / tot.sent : 0, openRate: tot.sent ? tot.opens / tot.sent : null,
       totalSent: total, stage, pacePerHour: paceLimit(author) * 12, doubleOptIn: !!author.doubleOptIn, dailyCap: (await dailyQuota(db, env)).cap
@@ -1135,6 +1264,7 @@ async function route(request, env, ctx) {
   }
 
   if (path === '/domain' && m === 'POST') {
+    if (!env.RESEND_API_KEY) bad('Sending from your own domain is not available on this Ink instance yet.');
     const domain = String(body.domain || '').toLowerCase().trim();
     if (!/^[a-z0-9.-]+\.[a-z]{2,}$/.test(domain)) bad('Enter a domain like mail.yourname.com');
     const r = await resend(env, '/domains', { name: domain, region: env.RESEND_REGION || 'eu-west-1' });
@@ -1143,20 +1273,13 @@ async function route(request, env, ctx) {
     return json({ ok: true, domain, records });
   }
   if (path === '/domain/verify' && m === 'POST') {
-    const d = author.customDomain; if (!d || !d.resendId) bad('No custom domain set up.');
-    let r;
-    try {
-      await resend(env, `/domains/${d.resendId}/verify`, null, 'POST').catch(() => { });
-      r = await resend(env, `/domains/${d.resendId}`, null, 'GET');
-    } catch (e) {
-      if (/404|not found/i.test(e.message)) {
-        // The Resend entry Ink created no longer exists (deleted or re-created in the Resend dashboard).
-        // Look for an entry with the same name and adopt it; otherwise clear so the author can set up again.
-        const list = await resend(env, '/domains', null, 'GET').catch(() => ({ data: [] }));
-        const match = (list.data || []).find(x => x.name === d.domain);
-        if (!match) { await db.set(`authors/${uid}`, { customDomain: null, updatedAt: nowIso() }); bad(`Resend no longer has an entry for ${d.domain} — it was deleted or re-created outside Ink. Click "Set up" again and add the records it shows.`); }
-        r = await resend(env, `/domains/${match.id}`, null, 'GET'); d.resendId = match.id; d.adopted = true;
-      } else throw e;
+    const d0 = author.customDomain; if (!d0 || !d0.resendId) bad('No custom domain set up.');
+    let r, d;
+    try { ({ r, d } = await resendDomainStatus(env, d0)); }
+    catch (e) {
+      if (!e.gone) throw e;
+      await db.set(`authors/${uid}`, { customDomain: null, updatedAt: nowIso() });
+      bad(`Resend no longer has an entry for ${d0.domain} — it was deleted or re-created outside Ink. Click "Set up" again and add the records it shows.`);
     }
     const status = r.status === 'verified' ? 'verified' : (r.status || 'pending');
     const patch = { ...d, status, checkedAt: nowIso(), records: r.records && r.records.length ? r.records.map(x => ({ type: x.type, name: x.name, value: x.value, priority: x.priority || null, status: x.status || null })) : d.records };
@@ -1228,12 +1351,13 @@ async function runCron(env, ctx) {
   try {
     const pend = await db.query(null, 'authors', { where: [['customDomain.status', '==', 'pending']], limit: 10 });
     for (const a of pend) {
-      const d = a.customDomain || {}; if (!d.resendId) continue;
-      const lastCheck = d.checkedAt ? new Date(d.checkedAt).getTime() : 0;
+      const d0 = a.customDomain || {}; if (!d0.resendId) continue;
+      const lastCheck = d0.checkedAt ? new Date(d0.checkedAt).getTime() : 0;
       if (Date.now() - lastCheck < 10 * 60e3) continue; // every ~10 minutes per author
       try {
-        await resend(env, `/domains/${d.resendId}/verify`, null, 'POST').catch(() => { });
-        const r = await resend(env, `/domains/${d.resendId}`, null, 'GET');
+        let r, d;
+        try { ({ r, d } = await resendDomainStatus(env, d0)); }
+        catch (e) { if (e.gone) { await db.set(`authors/${a.id}`, { customDomain: { ...d0, checkedAt: t }, updatedAt: t }); continue; } throw e; }
         const status = r.status === 'verified' ? 'verified' : (r.status || 'pending');
         const patch = { ...d, status, checkedAt: t, records: r.records && r.records.length ? r.records.map(x => ({ type: x.type, name: x.name, value: x.value, priority: x.priority || null, status: x.status || null })) : d.records };
         if (status === 'verified') {

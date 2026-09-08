@@ -13,6 +13,12 @@ routes = [
   { pattern = "go.jacobsiler.com/*", zone_name = "jacobsiler.com" }
 ]
 
+# Cloudflare Email Service — sends for everyone on the shared domain. Requires the Workers Paid plan and
+# the sending domain onboarded under Email > Email Service in the Cloudflare dashboard (see README).
+# Authors who verify their own domain in Ink are sent through Resend instead (hybrid).
+[[send_email]]
+name = "EMAIL"
+
 # Runs every 5 minutes: scheduled sends, welcome sequences, nudges, 48h reports.
 [triggers]
 crons = ["*/5 * * * *"]
@@ -21,13 +27,17 @@ crons = ["*/5 * * * *"]
 FIREBASE_PROJECT_ID = "miscellaneous-117e9"
 FIREBASE_WEB_API_KEY = "AIzaSyDxLI57pgS9WX1ekMerbcx8M6aVeWacpy0"
 GEMINI_MODEL = "gemini-2.5-flash"
-# Shared sending domain — verify it in Resend (see README). Authors send as penname@this-domain.
+# Shared sending domain for Resend sends (only used if the Cloudflare binding is absent). Authors send as penname@this-domain.
 INK_FROM_DOMAIN = "mail.ink.jacobsiler.com"
+# Shared sending domain for Cloudflare Email Service sends: the domain onboarded in Email Service.
+# If Cloudflare only lets you onboard the zone apex, set this to "jacobsiler.com".
+CF_FROM_DOMAIN = "mail.ink.jacobsiler.com"
 # Region for author sending domains created through Ink (eu-west-1 | us-east-1 | sa-east-1 | ap-northeast-1)
 RESEND_REGION = "eu-west-1"
 # Daily sending budget for the whole instance, matching the email provider's plan.
-# Resend Free = 100/day → set 95 (leaves room for welcome + test emails). Paid plans have no daily limit → set 0.
-DAILY_SEND_CAP = "95"
+# Resend Free = 100/day → 95. Cloudflare Email Service: new accounts start with a modest daily quota that
+# grows with good sending — start around 500 and raise it as Cloudflare raises yours; 0 = unlimited.
+DAILY_SEND_CAP = "500"
 # Where the app lives (links in nudge emails)
 APP_URL = "https://ink.jacobsiler.com"
 # This Worker's public URL (join pages, unsubscribe links, approve links). Use a custom route if you add one.

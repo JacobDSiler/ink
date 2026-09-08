@@ -29,11 +29,17 @@ legacy/index.html     the original single-author Ink Room page
 2. Firestore rules: `firestore.rules` is the full merged file (Boxes + Folio + Ink). `deploy.cmd` publishes it via the Firebase CLI (`npm i -g firebase-tools`, then `firebase login` once); or paste it into the console.
 3. Project settings → Service accounts → **Generate new private key**. Save the downloaded file as `worker/service-account.json` (git-ignored); `push-secrets.cmd` uploads it as `FIREBASE_SERVICE_ACCOUNT_B64`.
 
-### 2. Resend
-1. Create an API key → `RESEND_API_KEY`.
-2. Domains → add `mail.ink.jacobsiler.com` (or whatever you set as `INK_FROM_DOMAIN`) and add the DNS records in Cloudflare. This is the shared sending domain for every author; authors can verify their own later from Settings.
-3. Webhooks → add `https://<worker-url>/webhooks/resend` with events `email.delivered, email.opened, email.clicked, email.bounced, email.complained, email.delivery_delayed`. Copy the signing secret → `RESEND_WEBHOOK_SECRET`.
-4. In the Resend domain settings turn on **open and click tracking**.
+### 2. Email providers (hybrid)
+Ink sends through **Cloudflare Email Service** for everyone on the shared domain, and through **Resend** only for authors who verify their own domain. Opens and clicks are tracked by Ink itself (`/o/…` pixel, `/r/…` redirect), so analytics do not depend on either provider.
+
+**Cloudflare Email Service** (needs the Workers Paid plan, $5/month; 3,000 emails/month included, then $0.35 per 1,000):
+1. Cloudflare dashboard → Email → Email Service → onboard a sending domain. Try `mail.ink.jacobsiler.com`; if the dashboard only offers zone apexes, onboard `jacobsiler.com` and set `CF_FROM_DOMAIN = "jacobsiler.com"` in `wrangler.toml`. Cloudflare adds the DKIM/SPF/DMARC records itself.
+2. The `[[send_email]]` binding in `wrangler.toml` is already there; deploy.
+3. New accounts start with a modest daily quota — keep `DAILY_SEND_CAP` in step with it and request increases as your sending grows.
+
+**Resend** (optional — only for author custom domains):
+1. Create an API key → `RESEND_API_KEY`. Without it the "own sending domain" feature is simply hidden.
+2. Webhooks → `https://go.jacobsiler.com/webhooks/resend` with `email.delivered, email.bounced, email.complained, email.delivery_delayed` → signing secret → `RESEND_WEBHOOK_SECRET`. (Resend's open/click events are ignored; Ink tracks those itself, so leave Resend's tracking off.)
 
 ### 3. Gemini
 Create a key at aistudio.google.com → `GEMINI_API_KEY`. Model is set in `wrangler.toml` (`gemini-2.5-flash`).
@@ -73,10 +79,11 @@ Times are ISO strings. Subscriber ids are the first 20 chars of base64url(sha256
 | `POST /ai/draft` `/ai/subjects` `/ai/polish` `/ai/plan` `/ai/insights` | Gemini |
 | `POST /campaigns/:id/test` `/send` `/schedule` `/unschedule` `/report` · `GET /campaigns/:id/job` | sending |
 | `POST /domain` · `POST /domain/verify` · `DELETE /domain` | author's own sending domain via Resend |
+| `GET /deliverability` · `GET /list/health` · `POST /list/prune` | inbox-placement checks, list temperature, archive cold readers |
 | `POST /nudge/run` · `POST /automations/welcome/test` | manual triggers |
-| public: `GET/POST /join/:slug` · `GET /embed.js` · `GET /confirm/:token` · `GET/POST /u/:uid/:sid/:token` · `GET/POST /approve/:token` · `POST /webhooks/resend` | |
+| public: `GET/POST /join/:slug` · `GET /embed.js` · `GET /confirm/:token` · `GET/POST /u/:uid/:sid/:token` · `GET /keep/:uid/:sid/:token` · `GET /o/…` (open pixel) · `GET /r/…` (click redirect) · `GET/POST /approve/:token` · `POST /webhooks/resend` | |
 
-Sends run as resumable jobs (`jobs/{uid}_{cid}`): 100-recipient Resend batches, continued by the cron if a request runs out of time, so large lists are fine on the free Workers plan.
+Sends run as resumable jobs (`jobs/{uid}_{cid}`): an engaged-first queue in 4,000-id chunks, 100 per batch, paced for warm-up and the daily budget, continued by the cron. Provider limits or outages pause the job and rewind the batch; already-reached readers are skipped on retry, so nobody gets a letter twice.
 
 ## Local testing
 `node --check` all files; `worker/` runs under `wrangler dev` with `.dev.vars` holding the secrets. The renderer can be exercised in Node directly (`import './shared/render.js'`).
