@@ -418,13 +418,15 @@ Formatting rules for the body (plain text with light markup only): paragraphs se
 
 // ────────────────────────────────────────────────────────── subscriber ops ──
 
+// Imported readers carry no engagement history: the import date is not activity (mirror of lastActivity() in the app).
+function lastActivity(sub) { return sub.lastOpenAt || sub.lastClickAt || sub.reconfirmedAt || (sub.source === 'import' ? (sub.subscribedAt || '') : (sub.confirmedAt || sub.createdAt || '')); }
 function segmentMatch(sub, segment) {
   if (!segment) return true;
   const tags = sub.tags || [];
   if (segment.include && segment.include.length && !segment.include.some(t => tags.includes(t))) return false;
   if (segment.exclude && segment.exclude.length && segment.exclude.some(t => tags.includes(t))) return false;
   if (segment.engagement && segment.engagement !== 'all') {
-    const last = sub.lastOpenAt || sub.lastClickAt || sub.createdAt || '';
+    const last = lastActivity(sub);
     const quiet = !last || (Date.now() - new Date(last).getTime()) > 90 * 864e5;
     if (segment.engagement === 'quiet' && !quiet) return false;
     if (segment.engagement === 'engaged' && quiet) return false;
