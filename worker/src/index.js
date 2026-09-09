@@ -534,6 +534,16 @@ async function emailPayload(env, uid, author, sub, token, campaign, tags, provid
   };
 }
 
+
+/** The "subscriber" a test email is addressed to. If the address is on the author's list, the real record is used so
+ *  every link in the test (keep / unsubscribe / confirm) behaves exactly as it will for readers; otherwise a sentinel
+ *  sid of 'test' is used and those links show a preview page instead of "not on the list". */
+async function testRecipient(db, uid, email, author) {
+  const sid = await subscriberId(email);
+  const real = await db.get(`authors/${uid}/subscribers/${sid}`).catch(() => null);
+  if (real) return { ...real, id: sid, sid };
+  return { email, name: author.penName || 'Reader', sid: 'test' };
+}
 /** Transactional single send (confirm, welcome automation steps, tests). */
 async function sendSingle(env, db, uid, author, sub, campaign, { kind = 'single', track = true } = {}) {
   const sid = sub.sid || sub.id || (await subscriberId(sub.email));
@@ -1059,6 +1069,7 @@ async function route(request, env, ctx) {
     const [, uid, sid, token] = parts;
     const expect = await unsubToken(env, uid, sid);
     if (!timingSafeEqual(token, expect)) return html(pageShell('Invalid link', '<h1>Invalid link</h1><p>This unsubscribe link is not valid.</p>'), 400);
+    if (sid === 'test') return html(pageShell('Test link', '<h1>This is a test email</h1><p>For a real reader this link unsubscribes them in one click. Nothing was changed. To try the full flow, add your own address to your readers first, then send the test again.</p>'));
     const author = await db.get(`authors/${uid}`); const sub = await db.get(`authors/${uid}/subscribers/${sid}`);
     if (!author || !sub) return html(pageShell('Already removed', '<h1>Already removed</h1><p>That address is not on the list.</p>'));
     const doUnsub = async () => {
@@ -1097,6 +1108,7 @@ async function route(request, env, ctx) {
     const [, uid, sid, token] = parts;
     const expect = await keepToken(env, uid, sid);
     if (!timingSafeEqual(token, expect)) return html(pageShell('Invalid link', '<h1>Invalid link</h1><p>This link is not valid.</p>'), 400);
+    if (sid === 'test') return html(pageShell('Test link', '<h1>This is a test email</h1><p>For a real reader this link marks them as staying on the list and shows a thank-you page. Nothing was changed. To try the full flow, add your own address to your readers first, then send the test again.</p>'));
     const author = await db.get(`authors/${uid}`); const sub = await db.get(`authors/${uid}/subscribers/${sid}`);
     if (!author || !sub) return html(pageShell('Not found', '<h1>Not found</h1><p>That address is not on the list.</p>'), 404);
     const t = nowIso();
@@ -1200,7 +1212,7 @@ async function route(request, env, ctx) {
     if (action === 'test' && m === 'POST') {
       const to = body.to || user.email;
       if (!isEmail(to)) bad('Enter a valid address for the test.');
-      const r = await sendSingle(env, db, uid, author, { email: to, name: author.penName || 'Reader', sid: 'test' }, { ...c, subject: `[Test] ${c.subject}` }, { kind: 'test', track: false });
+      const r = await sendSingle(env, db, uid, author, await testRecipient(db, uid, to, author), { ...c, subject: `[Test] ${c.subject}` }, { kind: 'test', track: false });
       return json({ ok: true, id: r.id, to });
     }
     if (action === 'send' && m === 'POST') {
@@ -1316,7 +1328,7 @@ async function route(request, env, ctx) {
     const auto = await db.get(`authors/${uid}/automations/welcome`);
     if (!auto || !(auto.steps || []).length) bad('No welcome sequence saved yet.');
     const step = auto.steps[Math.min(Number(body.step || 0), auto.steps.length - 1)];
-    const r = await sendSingle(env, db, uid, author, { email: user.email, name: author.penName || 'Reader', sid: 'test' }, { subject: `[Test] ${step.subject}`, previewText: step.previewText, body: step.body }, { kind: 'test', track: false });
+    const r = await sendSingle(env, db, uid, author, await testRecipient(db, uid, user.email, author), { subject: `[Test] ${step.subject}`, previewText: step.previewText, body: step.body }, { kind: 'test', track: false });
     return json({ ok: true, id: r.id });
   }
 
