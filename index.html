@@ -43,6 +43,7 @@
   .brand { padding:0 1.5rem 1.25rem; border-bottom:1px solid var(--border); margin-bottom:.75rem; }
   .brand .t { font-family:var(--serif); font-size:1.5rem; font-weight:300; letter-spacing:.2em; color:var(--brass-light); }
   .brand .s { font-size:.72rem; letter-spacing:.14em; text-transform:uppercase; color:var(--parch-dim); }
+  .list-switch { margin-top:.6rem; width:100%; background:var(--ink); color:var(--parch); border:1px solid var(--border); border-radius:4px; padding:.35rem .5rem; font-family:var(--serif); font-size:.9rem; }
   nav.side a.nl { display:flex; align-items:center; gap:.7rem; padding:.55rem 1.5rem; color:var(--parch-dark); text-decoration:none; font-size:.95rem; letter-spacing:.03em; border-left:2px solid transparent; }
   nav.side a.nl:hover { color:var(--parch); background:rgba(255,255,255,.02); }
   nav.side a.nl.active { color:var(--brass-light); border-left-color:var(--brass); background:rgba(184,134,11,.06); }
@@ -249,7 +250,7 @@
 <!-- ═══════════ APP ═══════════ -->
 <div id="app">
   <nav class="side">
-    <div class="brand"><div class="t">INK</div><div class="s" id="brand-sub">Author mailer</div></div>
+    <div class="brand"><div class="t">INK</div><div class="s" id="brand-sub">Author mailer</div><select id="list-switch" class="list-switch" onchange="ink.listSwitch(this)" title="Switch list"></select></div>
     <a class="nl" href="#dashboard" data-nav="dashboard"><span class="g">◈</span>Today</a>
     <a class="nl" href="#approvals" data-nav="approvals"><span class="g">✓</span>Approvals<span class="badge hidden" id="badge-approvals"></span></a>
     <a class="nl" href="#campaigns" data-nav="campaigns"><span class="g">✉</span>Letters</a>
@@ -296,11 +297,16 @@ const auth = getAuth(fb);
 const db = getFirestore(fb);
 const T = InkTemplates, R = InkRender;
 
-const S = { me: null, user: null, author: null, campaigns: [], plans: [], suggestions: [], welcome: null, subs: null, metrics: [], unsub: [], view: '', joinUrl: '' };
+const S = { me: null, user: null, ws: null, lists: [], author: null, campaigns: [], plans: [], suggestions: [], welcome: null, subs: null, metrics: [], unsub: [], view: '', joinUrl: '' };
 const $ = (id) => document.getElementById(id);
 const esc = R.escapeHtml;
 const nowIso = () => new Date().toISOString();
-const uid = () => S.user.uid;
+// The active LIST. An account's first list has the account's own uid; extra lists have their own ids and are
+// owned via ownerUid. Every Firestore path and Worker call is scoped to the active list.
+const uid = () => S.ws || S.user.uid;
+const lsKey = () => 'ink.list.' + (S.user ? S.user.uid : '');
+function rememberList(id) { try { if (id && id !== S.user.uid) localStorage.setItem(lsKey(), id); else localStorage.removeItem(lsKey()); } catch { } }
+function recallList() { try { return localStorage.getItem(lsKey()) || null; } catch { return null; } }
 const fmtDate = (iso, opts) => iso ? new Date(iso).toLocaleDateString('en-IE', opts || { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
 const fmtDateTime = (iso) => iso ? new Date(iso).toLocaleString('en-IE', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—';
 const pct = (a, b) => b ? Math.round(1000 * (a || 0) / b) / 10 + '%' : '—';
@@ -317,7 +323,7 @@ function hideMsg(id) { const el = $(id); if (el) el.classList.remove('visible');
 
 async function api(path, body, method) {
   const token = await S.user.getIdToken();
-  const opts = { method: method || (body ? 'POST' : 'GET'), headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: body ? JSON.stringify(body) : undefined };
+  const opts = { method: method || (body ? 'POST' : 'GET'), headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token, 'X-Ink-List': uid() }, body: body ? JSON.stringify(body) : undefined };
   let res;
   try { res = await fetch(WORKER + path, opts); }
   catch (e) {
@@ -361,25 +367,86 @@ function friendlyAuth(e) { const c = e.code || ''; if (c.includes('wrong-passwor
 let unsubAuthor = null;
 onAuthStateChanged(auth, async (user) => {
   $('loading').style.display = 'none';
-  S.unsub.forEach(u => u()); S.unsub = [];
-  if (!user) { S.user = null; $('auth').classList.remove('hidden'); $('app').classList.remove('visible'); return; }
+  if (!user) { S.user = null; S.ws = null; S.unsub.forEach(u => u()); S.unsub = []; $('auth').classList.remove('hidden'); $('app').classList.remove('visible'); return; }
   S.user = user; $('auth').classList.add('hidden');
   $('foot-name').textContent = user.email || '';
+  S.ws = recallList();
+  boot();
+});
+
+// Load (or re-load) the active list: onboarding if it is not set up yet, otherwise the app.
+async function boot() {
+  S.unsub.forEach(u => u()); S.unsub = [];
+  Object.assign(S, { me: null, author: null, campaigns: [], plans: [], suggestions: [], welcome: null, subs: null, metrics: [], joinUrl: '' });
   let snap;
   try { snap = await getDoc(aDoc()); }
   catch (e) {
+    if (S.ws && /permission|not found/i.test(e.message || '')) { S.ws = null; rememberList(null); return boot(); } // stale remembered list
     $('app').classList.add('visible'); S.view = 'error';
     const perm = /permission/i.test(e.message || '');
     $('main').innerHTML = `<div class="wizard fade" style="text-align:center;padding-top:10vh"><div class="ornament">✦ ✦ ✦</div><h1 style="margin:.5rem 0">Ink can't reach its database</h1>
       <p class="muted">${perm ? 'Firestore refused the request: <b>Missing or insufficient permissions</b>. The Ink rules block has not been published to the <code>miscellaneous-117e9</code> project yet.' : esc(e.message)}</p>
-      ${perm ? `<div class="card" style="text-align:left;margin-top:1.5rem"><div class="card-body small"><b>Fix (one minute):</b> Firebase console → Firestore → Rules → paste the block from <code>firestore.rules</code> just before the final <code>// Anything not matched above…</code> line → Publish. Then reload this page.</div></div>` : ''}
+      ${perm ? `<div class="card" style="text-align:left;margin-top:1.5rem"><div class="card-body small"><b>Fix (one minute):</b> Firebase console → Firestore → Rules → paste the block from <code>firestore.rules</code> just before the final <code>// Anything not matched above…</code> line, then Publish.</div></div>` : ''}
       <div class="actions" style="justify-content:center;margin-top:1rem"><button class="btn btn-primary" onclick="location.reload()">Reload</button><button class="btn btn-ghost" onclick="ink.signOut()">Sign out</button></div>
-      <p class="dim small" style="margin-top:2rem">Signed in as ${esc(user.email || '')}</p></div>`;
+      <p class="dim small" style="margin-top:2rem">Signed in as ${esc(S.user.email || '')}</p></div>`;
     return;
   }
+  if (S.ws && (!snap.exists() || snap.data().deleted)) { S.ws = null; rememberList(null); return boot(); }
+  loadLists();
   if (!snap.exists() || !snap.data().onboarded) { $('app').classList.add('visible'); return renderOnboarding(snap.exists() ? snap.data() : {}); }
   startApp();
-});
+}
+
+/* ── lists (one account, many lists) ── */
+async function loadLists() {
+  try { const r = await api('/lists'); S.lists = r.lists || []; S.plan = r.plan; S.maxLists = r.maxLists; } catch { }
+  if (!S.lists.length) S.lists = [{ id: S.user.uid, isPrimary: true, name: (S.author && S.author.penName) || 'My list', subscriberCount: (S.author && S.author.subscriberCount) || 0, onboarded: true }];
+  renderListSwitch(); if (S.view === 'lists') render();
+}
+function renderListSwitch() {
+  const el = $('list-switch'); if (!el) return;
+  const cur = uid();
+  el.innerHTML = S.lists.map(l => `<option value="${esc(l.id)}" ${l.id === cur ? 'selected' : ''}>${esc(l.name || l.penName || 'List')}</option>`).join('') +
+    `<option disabled>──────</option><option value="__new">＋ New list…</option><option value="__manage">Manage lists…</option>`;
+  el.value = cur;
+}
+ink.listSwitch = (el) => { const v = el.value; if (v === '__new') { renderListSwitch(); ink.newList(); } else if (v === '__manage') { renderListSwitch(); location.hash = '#lists'; } else ink.switchList(v); };
+ink.switchList = (id) => { if (id === uid()) return; S.ws = id === S.user.uid ? null : id; rememberList(S.ws); location.hash = '#dashboard'; boot(); };
+ink.newList = () => {
+  const full = S.maxLists && S.lists.length >= S.maxLists;
+  modal(`<h2>New list</h2>
+    ${full ? `<p class="muted">Your <b>${esc(planLabel())}</b> plan includes ${S.maxLists} ${S.maxLists === 1 ? 'list' : 'lists'}. Upgrade to add another — lists cost nothing to hold, so the next tier up is the easiest way to keep a project, product or second pen name apart from your author list.</p><div class="modal-actions"><button class="btn btn-ghost" onclick="ink.closeModal()">Close</button></div>` :
+    `<p class="muted">A list has its own readers, letters, plans, sign-up page, voice and sending name. Use one per project, product, game, pen name or audience.</p>
+    <label>Name <span class="hint">(readers will see this as the sender until you change it)</span></label><input type="text" id="nl-name" placeholder="e.g. Folio, Sky Bridge Saga readers, Studio news">
+    <label>What is it for?</label><select id="nl-kind"><option value="author">An author / pen name</option><option value="product">A product or app</option><option value="game">A game</option><option value="project">A project or launch</option><option value="business">A business or team</option><option value="other">Something else</option></select>
+    <div id="nl-err" class="msg err hidden"></div>
+    <div class="modal-actions"><button class="btn btn-ghost" onclick="ink.closeModal()">Cancel</button><button class="btn btn-primary" onclick="ink.createList(this)">Create list</button></div>`}`);
+  setTimeout(() => { const i = $('nl-name'); if (i) i.focus(); }, 50);
+};
+ink.createList = async (btn) => {
+  const name = $('nl-name').value.trim(); if (name.length < 2) return showMsg('nl-err', 'Give the list a name.');
+  busy(btn, true, 'Creating');
+  try { const r = await api('/lists', { name, kind: $('nl-kind').value }); closeModal(); S.lists.push(r.list); ink.switchList(r.id); }
+  catch (e) { showMsg('nl-err', e.message); busy(btn, false); }
+};
+ink.renameList = async (id) => {
+  const l = S.lists.find(x => x.id === id); const name = prompt('List name', l ? l.name : ''); if (!name || name.trim().length < 2) return;
+  try { await api(`/lists/${id}/rename`, { name: name.trim() }); await loadLists(); toast('Renamed'); } catch (e) { toast(e.message); }
+};
+ink.deleteList = async (id) => {
+  const l = S.lists.find(x => x.id === id); if (!l || l.isPrimary) return;
+  if (!(await confirmModal('Delete this list?', `<b>${esc(l.name)}</b> and its ${(l.subscriberCount || 0).toLocaleString()} readers will disappear from Ink. Its sign-up page stops working immediately. Ink keeps the data for 30 days in case you change your mind — email support to restore it.`, 'Delete list', true))) return;
+  try { await api(`/lists/${id}`, null, 'DELETE'); if (uid() === id) { S.ws = null; rememberList(null); } await loadLists(); if (uid() === S.user.uid) boot(); else render(); toast('List deleted'); } catch (e) { toast(e.message); }
+};
+function planLabel() { return ({ free: 'Free', author: 'Author', pro: 'Pro', studio: 'Studio' })[S.plan] || 'Free'; }
+function renderLists() {
+  const rows = S.lists.map(l => `<tr><td><b>${esc(l.name)}</b>${l.isPrimary ? ' <span class="chip">primary</span>' : ''}${l.id === uid() ? ' <span class="chip on">open</span>' : ''}<div class="small dim">${esc(l.penName || '')}${l.slug ? ` · ${esc(PUBLIC().replace(/^https?:\/\//, ''))}/join/${esc(l.slug)}` : ''}${l.onboarded ? '' : ' · <i>not set up yet</i>'}</div></td>
+    <td>${(l.subscriberCount || 0).toLocaleString()}</td>
+    <td style="text-align:right;white-space:nowrap">${l.id !== uid() ? `<button class="btn btn-sm" onclick="ink.switchList('${esc(l.id)}')">Open</button>` : ''}<button class="btn btn-sm btn-ghost" onclick="ink.renameList('${esc(l.id)}')">Rename</button>${l.isPrimary ? '' : `<button class="btn btn-sm btn-ghost" onclick="ink.deleteList('${esc(l.id)}')">Delete</button>`}</td></tr>`).join('');
+  $('main').innerHTML = head('Lists', `Each list is a separate audience with its own readers, letters, plans, sign-up page and sending name. You are using <b>${S.lists.length}</b> of <b>${S.maxLists || 1}</b> on the <b>${esc(planLabel())}</b> plan.`, `<button class="btn btn-primary" onclick="ink.newList()">＋ New list</button>`) +
+    `<div class="card"><div class="card-body tbl-wrap"><table><thead><tr><th>List</th><th>Readers</th><th></th></tr></thead><tbody>${rows}</tbody></table></div></div>
+    <p class="small muted" style="margin-top:1rem">Plans: Free — 1 list · Author — 2 · Pro — 5 · Studio — 25. Readers, letters and plans never mix between lists; a reader who joins two of your lists is two separate records, and can unsubscribe from each on its own.</p>`;
+}
 
 function startApp() {
   $('app').classList.add('visible');
@@ -390,7 +457,7 @@ function startApp() {
   S.unsub.push(onSnapshot(query(aCol('plans'), orderBy('createdAt', 'desc'), limit(50)), s => { S.plans = s.docs.map(d => ({ id: d.id, ...d.data() })); if (['dashboard', 'plan'].includes(S.view)) render(); }));
   S.unsub.push(onSnapshot(query(aCol('suggestions'), where('status', '==', 'open'), limit(100)), s => { S.suggestions = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')); const n = S.suggestions.length; ['badge-approvals', 'badge-approvals-m'].forEach(id => { $(id).textContent = n; $(id).classList.toggle('hidden', !n); }); if (['dashboard', 'approvals'].includes(S.view)) render(); }));
   S.unsub.push(onSnapshot(aDoc('automations', 'welcome'), s => { S.welcome = s.exists() ? s.data() : null; if (['automations', 'dashboard'].includes(S.view)) render(); }));
-  window.addEventListener('hashchange', render);
+  if (!S.hashBound) { window.addEventListener('hashchange', render); S.hashBound = true; }
   if (!location.hash || location.hash === '#') location.hash = '#dashboard';
   render();
 }
@@ -401,9 +468,9 @@ function renderOnboarding(existing) {
   const a = existing || {};
   $('main').innerHTML = `
   <div class="wizard fade">
-    <div style="text-align:center;margin-bottom:1.5rem"><div class="ornament">✦ ✦ ✦</div><h1 style="margin:.5rem 0">Welcome to Ink</h1><p class="muted">Five minutes of setup, then Ink keeps your reader list warm for you.</p></div>
-    <div class="card"><div class="card-head"><span class="g">✍</span><h3>You, the author</h3></div><div class="card-body">
-      <div class="row"><div><label>Pen name</label><input type="text" id="ob-pen" value="${esc(a.penName || '')}" placeholder="The name on your books"></div>
+    <div style="text-align:center;margin-bottom:1.5rem"><div class="ornament">✦ ✦ ✦</div><h1 style="margin:.5rem 0">${a.ownerUid ? 'Set up ' + esc(a.listName || 'your new list') : 'Welcome to Ink'}</h1><p class="muted">${a.ownerUid ? 'A few details, then this list has its own readers, letters and sign-up page.' : 'Five minutes of setup, then Ink keeps your reader list warm for you.'}</p></div>
+    <div class="card"><div class="card-head"><span class="g">✍</span><h3>${a.ownerUid ? 'The sender' : 'You, the author'}</h3></div><div class="card-body">
+      <div class="row"><div><label>${a.ownerUid ? 'Name readers see' : 'Pen name'}</label><input type="text" id="ob-pen" value="${esc(a.penName || '')}" placeholder="The name on your books"></div>
       <div><label>Genre <span class="hint">(what readers would call it)</span></label><input type="text" id="ob-genre" value="${esc(a.genre || '')}" placeholder="e.g. cosy mystery, epic fantasy, YA sci-fi"></div></div>
       <label>Your sign-up address <span class="hint">(letters, numbers, hyphens)</span></label>
       <div class="inline"><span class="dim small">${esc(PUBLIC().replace(/^https?:\/\//, ''))}/join/</span><input type="text" id="ob-slug" value="${esc(a.slug || '')}" placeholder="your-pen-name" style="max-width:220px"></div>
@@ -461,7 +528,7 @@ function render() {
   const [view, arg, arg2] = h.split('/');
   S.view = view || 'dashboard';
   document.querySelectorAll('[data-nav]').forEach(a => a.classList.toggle('active', a.dataset.nav === S.view || (S.view === 'campaign' && a.dataset.nav === 'campaigns') || (S.view === 'compose' && a.dataset.nav === 'campaigns')));
-  const views = { dashboard: renderDashboard, approvals: renderApprovals, campaigns: renderCampaigns, campaign: () => renderCampaign(arg), compose: () => startCompose(arg, arg2), plan: () => renderPlan(arg), readers: renderReaders, templates: renderTemplates, automations: renderAutomations, analytics: renderAnalytics, settings: renderSettings };
+  const views = { dashboard: renderDashboard, approvals: renderApprovals, campaigns: renderCampaigns, campaign: () => renderCampaign(arg), compose: () => startCompose(arg, arg2), plan: () => renderPlan(arg), readers: renderReaders, templates: renderTemplates, automations: renderAutomations, analytics: renderAnalytics, settings: renderSettings, lists: renderLists };
   (views[S.view] || renderDashboard)();
   if (S.view !== 'campaign') window.scrollTo(0, 0);
 }
@@ -1022,12 +1089,13 @@ ink.checkDeliverability = async (btn) => {
     const stageText = { warming: 'Warming up — Ink sends slowly (about ' + k.pacePerHour.toLocaleString() + '/hour), most engaged readers first, until 500 letters have gone out.', building: 'Building — reputation is forming; pace is ' + k.pacePerHour.toLocaleString() + '/hour until 2,000 letters have gone out.', established: 'Established — full speed.' }[k.stage];
     el.innerHTML = `
       <div class="small muted" style="margin-bottom:.5rem">Sending from <b style="color:var(--parch-mid)">${esc(r.domain)}</b>${r.usingOwnDomain ? ' (your own domain, via Resend)' : ` (Ink's shared domain, via ${r.provider === 'cloudflare' ? 'Cloudflare' : 'Resend'})`}. Opens and clicks are measured by Ink itself, so they work the same on any provider.</div>
-      ${row(k.spf, 'SPF + return path', k.spf ? 'Mailbox providers can confirm Ink is allowed to send for this domain.' : 'Missing — the send.* MX and TXT records are not visible yet.')}
-      ${row(k.dkim, 'DKIM signature', k.dkim ? 'Every letter is cryptographically signed by your domain.' : 'Missing — the resend._domainkey record is not visible yet.')}
+      ${r.provider === 'cloudflare' && k.cfOnboarded === false ? row(false, 'Cloudflare Email Service domain', `<b>${esc(r.domain)}</b> is not onboarded yet, so sends fall back to Resend. In the Cloudflare dashboard go to <b>Compute → Email Service → Email Sending → Onboard domain</b>, choose ${esc(r.domain)}, and let it add the cf-bounce records. Ink switches over automatically once they resolve.`) : ''}
+      ${row(k.spf, 'SPF + return path', k.spf ? 'Mailbox providers can confirm Ink is allowed to send for this domain.' : (r.provider === 'cloudflare' ? 'Missing — the cf-bounce MX and TXT records are not visible yet.' : 'Missing — the send.* MX and TXT records are not visible yet.'))}
+      ${row(k.dkim, 'DKIM signature', k.dkim ? 'Every letter is cryptographically signed by your domain.' : (r.provider === 'cloudflare' ? 'Missing — the cf-bounce._domainkey record is not visible yet.' : 'Missing — the resend._domainkey record is not visible yet.'))}
       ${row(k.dmarc ? (k.dmarcPolicy === 'none' ? 'warn' : true) : false, 'DMARC policy', k.dmarc ? `Found (p=${k.dmarcPolicy}).${k.dmarcPolicy === 'none' ? ' Good start — move to p=quarantine once a few sends have gone cleanly.' : ''}` : `Gmail and Yahoo require DMARC for bulk senders. Add this TXT record (click to copy):<br><span class="code copy" onclick="ink.copy(this)" title="Click to copy">${esc(k.dmarcRecord.name)}</span> → <span class="code copy" onclick="ink.copy(this)" title="Click to copy" style="word-break:break-all">${esc(k.dmarcRecord.value)}</span>`)}
       ${row(true, 'One-click unsubscribe + plain-text part', 'Every letter carries List-Unsubscribe headers, a visible unsubscribe link, and a text version — all required by Gmail.')}
       ${row(k.postalAddress, 'Postal address in footer', k.postalAddress ? 'Present.' : 'Required by anti-spam law — add it above.')}
-      ${k.dailyCap ? row('warn', 'Daily sending budget', `${k.dailyCap} emails a day on the current email plan (Resend Free). Bigger letters are spread over several days automatically. Upgrading the provider plan removes the limit.`) : ''}
+      ${k.dailyCap ? row('warn', 'Daily sending budget', `${k.dailyCap} emails a day (DAILY_SEND_CAP). Bigger letters are spread over several days automatically; the provider's own limits pause and resume sends too. Raise the cap as ${r.provider === 'cloudflare' ? 'Cloudflare raises your quota' : 'your Resend plan allows'}.`) : ''}
       ${row(k.stage === 'established' ? true : 'warn', 'Sender reputation', stageText + ` ${k.totalSent.toLocaleString()} letters sent so far.`)}
       ${row(k.complaintRate < 0.001 && k.bounceRate < 0.02 ? true : 'warn', 'List hygiene', `Bounces ${pct(k.bounceRate)} (keep under 2%) · complaints ${pct(k.complaintRate)} (keep under 0.1%)${k.openRate != null ? ' · opens ' + pct(k.openRate) : ''}. ${k.doubleOptIn ? 'Double opt-in is on.' : 'Consider double opt-in for new sign-ups.'}`)}
       <p class="small dim" style="margin-top:.75rem">Register ${esc(r.domain.split('.').slice(-2).join('.'))} with <a href="https://postmaster.google.com" target="_blank" rel="noopener">Google Postmaster Tools</a> to watch your Gmail reputation directly. Ask readers to reply to your first letter or add you to contacts — replies are the strongest inbox signal there is.</p>`;

@@ -791,23 +791,33 @@ service cloud.firestore {
     // Fields on /authors/{uid} that only the Worker may set. Authors can
     // read them but any client write that touches them is rejected.
     function inkWorkerOnlyFields() {
-      return ['entitlements', 'plan', 'billing', 'customDomain', 'totalSent'];
+      return ['entitlements', 'plan', 'billing', 'customDomain', 'totalSent', 'ownerUid', 'deleted'];
+    }
+    // An account can own several LISTS. Each list is an /authors/{id} doc: the account's own uid is its first
+    // list; extra lists (created by the Worker) carry ownerUid = the account. inkOwner() is true for either.
+    function inkOwner(id) {
+      return request.auth != null && (
+        request.auth.uid == id
+        || (exists(/databases/$(database)/documents/authors/$(id))
+            && get(/databases/$(database)/documents/authors/$(id)).data.ownerUid == request.auth.uid)
+      );
     }
     match /authors/{uid} {
-      allow read:   if isUser(uid);
+      allow read:   if isUser(uid) || (resource != null && isUser(resource.data.ownerUid));
+      // Only the first list is created from the browser; extra lists are created by the Worker.
       allow create: if isUser(uid)
                     && !request.resource.data.keys().hasAny(inkWorkerOnlyFields());
-      allow update: if isUser(uid)
+      allow update: if inkOwner(uid)
                     && !request.resource.data.diff(resource.data).affectedKeys().hasAny(inkWorkerOnlyFields());
       allow delete: if false;
 
       // subscribers, campaigns, plans, suggestions, automations, metricsDaily
       match /{collection}/{doc} {
-        allow read, write: if isUser(uid);
+        allow read, write: if inkOwner(uid);
       }
       // Per-recipient delivery/open/click records — Worker writes only.
       match /campaigns/{cid}/recipients/{sid} {
-        allow read:  if isUser(uid);
+        allow read:  if inkOwner(uid);
         allow write: if false;
       }
       // Secrets the author hands Ink (e.g. their own Resend API key,

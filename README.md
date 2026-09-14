@@ -33,9 +33,9 @@ legacy/index.html     the original single-author Ink Room page
 Ink sends through **Cloudflare Email Service** for everyone on the shared domain, and through **Resend** only for authors who verify their own domain. Opens and clicks are tracked by Ink itself (`/o/…` pixel, `/r/…` redirect), so analytics do not depend on either provider.
 
 **Cloudflare Email Service** (needs the Workers Paid plan, $5/month; 3,000 emails/month included, then $0.35 per 1,000):
-1. Cloudflare dashboard → Email → Email Service → onboard a sending domain. Try `mail.ink.jacobsiler.com`; if the dashboard only offers zone apexes, onboard `jacobsiler.com` and set `CF_FROM_DOMAIN = "jacobsiler.com"` in `wrangler.toml`. Cloudflare adds the DKIM/SPF/DMARC records itself.
-2. The `[[send_email]]` binding in `wrangler.toml` is already there; deploy.
-3. New accounts start with a modest daily quota — keep `DAILY_SEND_CAP` in step with it and request increases as your sending grows.
+1. Cloudflare dashboard → **Compute → Email Service → Email Sending → Onboard domain** → choose `mail.ink.jacobsiler.com` (subdomains are onboarded directly, as their own sending domain). Cloudflare writes the records itself: `cf-bounce.mail.ink…` MX ×3 + SPF, `cf-bounce._domainkey.mail.ink…` DKIM, and `_dmarc.mail.ink…` (p=reject). They coexist with the Resend `send.*` / `resend._domainkey` records already there.
+2. `wrangler.toml` has the `[[send_email]]` binding and `EMAIL_PROVIDER = "cloudflare"`; deploy. Until the domain is onboarded, Cloudflare answers `E_SENDER_DOMAIN_NOT_AVAILABLE` and Ink falls back to Resend for an hour at a time; the Inbox placement card in Settings says which is in use.
+3. New accounts start with a conservative daily quota that Cloudflare raises with good sending (`E_DAILY_LIMIT_EXCEEDED` pauses a send until the next day; `E_RATE_LIMIT_EXCEEDED` pauses 15 minutes). Keep `DAILY_SEND_CAP` in step. Limits: 50 recipients per message, 5 MiB per message.
 
 **Resend** (optional — only for author custom domains):
 1. Create an API key → `RESEND_API_KEY`. Without it the "own sending domain" feature is simply hidden.
@@ -55,6 +55,29 @@ Check ``wrangler.toml` binds the Worker to the custom domain `go.jacobsiler.com`
 ### 5. Publish the app
 Double-click `deploy.cmd` (edit `COMMIT_MESSAGE.txt` first): it adds, commits and pushes, deploys the Firestore rules, and deploys the Worker. Or push to GitHub manually; Pages serves `index.html` at ink.jacobsiler.com. Sign in, complete onboarding, add your postal address (required in every marketing email), and import your existing list (MailerLite export CSV works as-is).
 
+## Deploying (InkWatch)
+
+`scripts\ink-watch-install.cmd` (double-click once) installs a login auto-start and puts **InkWatch** in the system
+tray: a green disc with an "I". It polls `.deploy-tick` every 15 seconds; when Claude rewrites that file after a
+substantial change ("ticks the canary"), InkWatch waits 20 seconds for files to settle and runs
+`scripts\ink-push.ps1`: git add/commit/push (GitHub Pages), `firebase deploy --only firestore:rules`, `wrangler deploy`.
+The commit message comes from the canary's `subject:` and `body:` lines. A core file that shrank by more than half
+holds the deploy (red icon, "Show anomaly report"; "Force deploy" overrides). `scripts\ink-push.cmd` runs the same
+push by hand; `deploy.cmd` is the older equivalent and still works.
+
+## Lists (one account, many audiences)
+
+An account can hold several **lists** — an author list, a product or game list, a project launch list. Each list is a
+separate `authors/{id}` document with its own readers, letters, plans, sign-up page, sending name, voice notes and
+optional sending domain. The account's own uid is its first list; extra lists have ids `<uid>_<random>` and carry
+`ownerUid`. The app sends the active list in an `X-Ink-List` header and every Worker call is scoped to it, so nothing
+downstream (jobs, tokens, tracking, cron) needed to change.
+
+Plans set how many lists an account may hold (`PLAN_LISTS` in the Worker): Free 1 · Author 2 · Pro 5 · Studio 25.
+The plan lives in `authors/{uid}.plan` (Worker-only field). Until billing exists, operators listed in `INK_ADMIN_UIDS`
+have unlimited lists and can set anyone's plan with `POST /admin/plan { uid, plan }`. Deleting a list is a soft delete
+(`deleted: true`, slug released, nudges stopped); the data stays in Firestore.
+
 ## Data model (Firestore)
 
 ```
@@ -71,6 +94,9 @@ slugs/{slug} · jobs · schedule · automationRuns · emailIndex   (Worker-only)
 Times are ISO strings. Subscriber ids are the first 20 chars of base64url(sha256(lowercased email)), so imports dedupe naturally.
 
 ## Worker API (Bearer = Firebase ID token)
+
+All authenticated routes accept `X-Ink-List: <listId>` (defaults to the account's own list).
+`GET /lists` · `POST /lists {name, kind}` · `POST /lists/:id/rename {name}` · `DELETE /lists/:id` · `POST /admin/plan {uid, plan}` (admins).
 
 | Route | Purpose |
 |---|---|

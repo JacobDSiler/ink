@@ -27,7 +27,7 @@ const enc = new TextEncoder();
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type,Authorization',
+  'Access-Control-Allow-Headers': 'Content-Type,Authorization,X-Ink-List',
   'Access-Control-Max-Age': '86400'
 };
 const json = (data, status = 200, extra = {}) =>
@@ -265,6 +265,14 @@ async function resend(env, path, body, method = 'POST') {
   return data;
 }
 // ── Provider layer: Cloudflare Email Service (shared domain) or Resend (author's own domain) ──
+// ── plans & lists ──
+// Lists cost nothing to hold, so the tiers are generous: what is being sold is organisation and leverage.
+const PLAN_LISTS = { free: 1, author: 2, pro: 5, studio: 25 };
+const PLAN_NAMES = { free: 'Free', author: 'Author', pro: 'Pro', studio: 'Studio' };
+function isInkAdmin(env, uid) { return String(env.INK_ADMIN_UIDS || '').split(',').map(x => x.trim()).filter(Boolean).includes(uid); }
+function planOf(env, account, accountDoc) { return isInkAdmin(env, account) ? 'studio' : (PLAN_LISTS[accountDoc && accountDoc.plan] ? accountDoc.plan : 'free'); }
+function listLimit(env, account, accountDoc) { return isInkAdmin(env, account) ? 999 : PLAN_LISTS[planOf(env, account, accountDoc)]; }
+
 function hasOwnDomain(author) { return !!(author && author.customDomain && author.customDomain.status === 'verified'); }
 
 // Ask Resend about an author's custom domain. Returns { r, d } where r is Resend's domain object and d is
@@ -298,7 +306,7 @@ async function resendDomainStatus(env, d) {
 // Cloudflare Email Service answers "could not find account config for sending domain" (or similar) when the
 // binding exists but the sending domain has not been onboarded under Email > Email Service. When that happens
 // and Resend is configured, Ink falls back to Resend for an hour (per isolate) instead of failing the send.
-const CF_CONFIG_RE = /account config|sending domain|not (been )?onboard|domain (is )?not (found|verified|configured)|no such domain/i;
+const CF_CONFIG_RE = /E_SENDER_DOMAIN_NOT_AVAILABLE|E_SENDER_NOT_VERIFIED|account config|sending domain|not (been )?onboard|domain (is )?not (found|verified|configured)|no such domain/i;
 let cfUnavailableUntil = 0;
 function cloudflareUsable(env) { return !!env.EMAIL && (env.EMAIL_PROVIDER || 'cloudflare') === 'cloudflare' && Date.now() > cfUnavailableUntil; }
 function providerFor(env, author) {
@@ -317,7 +325,7 @@ function fromAddress(env, author, provider) {
 }
 function inkFrom(env) { const p = cloudflareUsable(env) ? 'cloudflare' : 'resend'; return `Ink <ink@${sharedDomain(env, p)}>`; }
 
-const LIMIT_RE = /429|rate limit|quota|daily|limit/i;
+const LIMIT_RE = /E_DAILY_LIMIT_EXCEEDED|E_RATE_LIMIT_EXCEEDED|429|rate limit|quota|daily|limit/i;
 const SUPPRESS_RE = /suppress|E_RECIPIENT_SUPPRESSED|bounce/i;
 /** Send one message via the chosen provider. Returns { id, provider }. Throws with provider message. */
 async function deliverOne(env, payload, provider) {
@@ -1149,14 +1157,75 @@ async function route(request, env, ctx) {
   }
 
   // ── authenticated API ──
+  // The signed-in account may own several LISTS. Every list is an `authors/{id}` document (the account's own uid is
+  // its first list; extra lists have ids "<uid>_<random>" and carry ownerUid). The app names the active list with an
+  // X-Ink-List header; everything below then runs against that list exactly as it did when one account meant one list.
   const user = await requireUser(request, env);
-  const uid = user.uid;
-  const author = (await db.get(`authors/${uid}`)) || { id: uid, email: user.email };
+  const account = user.uid;
+  const wanted = (request.headers.get('X-Ink-List') || url.searchParams.get('list') || '').trim();
+  let uid = account, author;
+  if (wanted && wanted !== account) {
+    const ws = await db.get(`authors/${wanted}`);
+    if (!ws || ws.ownerUid !== account || ws.deleted) throw new HttpError(403, 'That list is not yours (or no longer exists).');
+    uid = wanted; author = ws;
+  } else author = (await db.get(`authors/${uid}`)) || { id: uid, email: user.email };
   author.email = author.replyTo || author.email || user.email;
   author.accountEmail = user.email;
+  const accountDoc = uid === account ? author : ((await db.get(`authors/${account}`)) || {});
+  const plan = planOf(env, account, accountDoc), maxLists = listLimit(env, account, accountDoc);
   const body = m === 'POST' || m === 'PUT' ? await readBody(request) : {};
 
-  if (path === '/me' && m === 'GET') { const q = await dailyQuota(db, env); const prov = providerFor(env, author); return json({ ok: true, user, author, publicUrl: env.PUBLIC_URL, fromAddress: fromAddress(env, author, prov), fromDomain: sharedDomain(env, prov), provider: prov, customDomainsAvailable: !!env.RESEND_API_KEY, dailyCap: q.cap, sentToday: q.sentToday, remainingToday: q.cap ? q.remaining : null }); }
+  // ── lists ──
+  const loadLists = async () => {
+    const extra = (await db.query(null, 'authors', { where: [['ownerUid', '==', account]], limit: 200 })).filter(l => !l.deleted);
+    const primary = { ...accountDoc, id: account };
+    const row = (l, isPrimary) => ({ id: l.id, isPrimary, name: l.listName || l.penName || (isPrimary ? 'My list' : 'Untitled list'), penName: l.penName || '', kind: l.listKind || (isPrimary ? 'author' : 'other'), slug: l.slug || '', subscriberCount: l.subscriberCount || 0, onboarded: !!l.onboarded, createdAt: l.createdAt || '' });
+    return [row(primary, true), ...extra.sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || '')).map(l => row(l, false))];
+  };
+  if (path === '/lists' && m === 'GET') return json({ ok: true, lists: await loadLists(), plan, maxLists, active: uid });
+  if (path === '/lists' && m === 'POST') {
+    const name = String(body.name || '').trim().slice(0, 80); if (name.length < 2) bad('Give the list a name.');
+    const lists = await loadLists();
+    if (lists.length >= maxLists) throw new HttpError(402, `Your ${PLAN_NAMES[plan] || plan} plan includes ${maxLists} ${maxLists === 1 ? 'list' : 'lists'}. Upgrade to add another.`);
+    const id = `${account}_${b64url(crypto.getRandomValues(new Uint8Array(6)))}`;
+    const t = nowIso();
+    const seed = {
+      ownerUid: account, listName: name, listKind: String(body.kind || 'other').slice(0, 24), penName: name, fromName: name,
+      email: accountDoc.replyTo || accountDoc.email || user.email, replyTo: accountDoc.replyTo || accountDoc.email || user.email,
+      postalAddress: accountDoc.postalAddress || '', webUrl: accountDoc.webUrl || '', timezone: accountDoc.timezone || 'Europe/Dublin',
+      nudgeHour: accountDoc.nudgeHour || 8, sendHour: accountDoc.sendHour || 9, brand: accountDoc.brand || { accent: '#a66e22', heading: '#1c2b4a', bg: '#f4f1ea' },
+      readerNoun: accountDoc.readerNoun || 'friend', doubleOptIn: false, onboarded: false, subscriberCount: 0, createdAt: t, updatedAt: t
+    };
+    await db.set(`authors/${id}`, seed);
+    return json({ ok: true, id, list: { id, isPrimary: false, name, penName: name, kind: seed.listKind, slug: '', subscriberCount: 0, onboarded: false, createdAt: t } });
+  }
+  if (parts[0] === 'lists' && parts[1] && parts[2] === 'rename' && m === 'POST') {
+    const id = parts[1]; const name = String(body.name || '').trim().slice(0, 80); if (name.length < 2) bad('Give the list a name.');
+    const l = id === account ? accountDoc : await db.get(`authors/${id}`);
+    if (!l || (id !== account && l.ownerUid !== account)) throw new HttpError(403, 'That list is not yours.');
+    await db.set(`authors/${id}`, { listName: name, updatedAt: nowIso() });
+    return json({ ok: true });
+  }
+  if (parts[0] === 'lists' && parts[1] && !parts[2] && m === 'DELETE') {
+    const id = parts[1]; if (id === account) bad('Your first list cannot be deleted — it is your account.');
+    const l = await db.get(`authors/${id}`); if (!l || l.ownerUid !== account) throw new HttpError(403, 'That list is not yours.');
+    const t = nowIso();
+    if (l.slug) await db.delete(`slugs/${l.slug}`).catch(() => { });
+    if (l.customDomain && l.customDomain.resendId && env.RESEND_API_KEY) await resend(env, `/domains/${l.customDomain.resendId}`, null, 'DELETE').catch(() => { });
+    // Soft delete: readers and letters stay in Firestore (recoverable), but the list disappears from the app, stops
+    // nudging and can no longer be addressed by join links or the API.
+    await db.set(`authors/${id}`, { deleted: true, deletedAt: t, slug: null, customDomain: null, nudgeNextAt: null, updatedAt: t });
+    return json({ ok: true });
+  }
+  if (path === '/admin/plan' && m === 'POST') {
+    if (!isInkAdmin(env, account)) throw new HttpError(403, 'Admins only.');
+    const target = String(body.uid || '').trim(); const p = String(body.plan || 'free'); if (!PLAN_LISTS[p]) bad('Unknown plan.');
+    if (!target) bad('uid required.');
+    await db.set(`authors/${target}`, { plan: p, planUpdatedAt: nowIso(), updatedAt: nowIso() });
+    return json({ ok: true, uid: target, plan: p });
+  }
+
+  if (path === '/me' && m === 'GET') { const q = await dailyQuota(db, env); const prov = providerFor(env, author); return json({ ok: true, user, author, account, listId: uid, plan, planName: PLAN_NAMES[plan] || plan, maxLists, isAdmin: isInkAdmin(env, account), publicUrl: env.PUBLIC_URL, fromAddress: fromAddress(env, author, prov), fromDomain: sharedDomain(env, prov), provider: prov, customDomainsAvailable: !!env.RESEND_API_KEY, dailyCap: q.cap, sentToday: q.sentToday, remainingToday: q.cap ? q.remaining : null }); }
 
   if (path === '/me/slug' && m === 'POST') {
     const slug = String(body.slug || '').toLowerCase().trim().replace(/[^a-z0-9-]/g, '');
@@ -1285,10 +1354,11 @@ async function route(request, env, ctx) {
     const tot = sent.reduce((a, c) => { const st = c.stats || {}; a.sent += st.sent || 0; a.bounced += st.bounced || 0; a.complained += st.complained || 0; a.opens += st.uniqueOpens || 0; return a; }, { sent: 0, bounced: 0, complained: 0, opens: 0 });
     const total = author.totalSent || 0;
     const stage = total < 500 ? 'warming' : total < 2000 ? 'building' : 'established';
-    const cfDkim = prov === 'cloudflare' ? await doh(`cf-bounce._domainkey.${orgDomain}`, 'TXT') : [];
-    const cfSpf = prov === 'cloudflare' ? await doh(`cf-bounce.${orgDomain}`, 'TXT') : [];
+    const cfDkim = prov === 'cloudflare' ? await doh(`cf-bounce._domainkey.${domain}`, 'TXT') : [];
+    const cfSpf = prov === 'cloudflare' ? await doh(`cf-bounce.${domain}`, 'TXT') : [];
+    const cfMx = prov === 'cloudflare' ? await doh(`cf-bounce.${domain}`, 'MX') : [];
     return json({ ok: true, domain, provider: prov, usingOwnDomain: !!verified && prov === 'resend', checks: {
-      spf: prov === 'cloudflare' ? cfSpf.some(x => /v=spf1/i.test(x)) || spf.some(x => /v=spf1/i.test(x)) : (spf.some(x => /v=spf1/i.test(x)) && mx.length > 0), dkim: prov === 'cloudflare' ? cfDkim.some(x => /p=/.test(x)) || dkim.some(x => /p=/.test(x)) : dkim.some(x => /p=/.test(x)), dmarc: !!dmarc, dmarcPolicy: policy, dmarcRecord: { name: `_dmarc.${domain}`, value: `v=DMARC1; p=none; rua=mailto:${author.replyTo || author.email || ''}` },
+      spf: prov === 'cloudflare' ? (cfSpf.some(x => /v=spf1/i.test(x)) && cfMx.length > 0) : (spf.some(x => /v=spf1/i.test(x)) && mx.length > 0), dkim: prov === 'cloudflare' ? cfDkim.some(x => /p=/.test(x)) : dkim.some(x => /p=/.test(x)), cfOnboarded: prov === 'cloudflare' ? (cfMx.length > 0 && cfDkim.some(x => /p=/.test(x))) : null, dmarc: !!dmarc, dmarcPolicy: policy, dmarcRecord: { name: `_dmarc.${domain}`, value: `v=DMARC1; p=none; rua=mailto:${author.replyTo || author.email || ''}` },
       postalAddress: !!author.postalAddress, replyTo: !!(author.replyTo || author.email), unsubscribe: true, plainText: true,
       bounceRate: tot.sent ? tot.bounced / tot.sent : 0, complaintRate: tot.sent ? tot.complained / tot.sent : 0, openRate: tot.sent ? tot.opens / tot.sent : null,
       totalSent: total, stage, pacePerHour: paceLimit(author) * 12, doubleOptIn: !!author.doubleOptIn, dailyCap: (await dailyQuota(db, env)).cap
