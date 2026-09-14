@@ -24,6 +24,7 @@ const Templates = globalThis.InkTemplates;
 // ───────────────────────────────────────────────────────────── utilities ──
 
 const enc = new TextEncoder();
+const INK_BUILD = '2026-09-14.2';
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
@@ -224,7 +225,9 @@ class Firestore {
     if (opts.limit) sq.limit = opts.limit;
     if (opts.startAfter) sq.startAt = { values: opts.startAfter.map(v => (v && typeof v === 'object' && v.referenceValue) ? v : fsEncode(v)), before: false };
     const url = `${this.base}${parent ? '/' + parent : ''}:runQuery`;
-    const rows = await this.req('POST', url, { structuredQuery: sq });
+    let rows;
+    try { rows = await this.req('POST', url, { structuredQuery: sq }); }
+    catch (e) { e.message = `[query ${collectionId} where=${JSON.stringify(opts.where || [])} orderBy=${JSON.stringify(opts.orderBy || [])}] ` + e.message; throw e; }
     return (rows || []).filter(r => r.document).map(r => this.docFromApi(r.document));
   }
 }
@@ -1045,7 +1048,7 @@ async function route(request, env, ctx) {
   const db = new Firestore(env);
 
   // ── public ──
-  if (path === '/' || path === '/health') return json({ ok: true, service: 'ink-worker', time: nowIso(), configured: missingConfig(env).length === 0, missing: missingConfig(env) });
+  if (path === '/' || path === '/health') return json({ ok: true, service: 'ink-worker', build: INK_BUILD, time: nowIso(), configured: missingConfig(env).length === 0, missing: missingConfig(env) });
   if (path === '/embed.js') return new Response(embedScript(env), { headers: { 'Content-Type': 'application/javascript', 'Cache-Control': 'public, max-age=3600', ...CORS } });
 
   if (parts[0] === 'join' && parts[1]) {
@@ -1503,7 +1506,8 @@ export default {
     catch (e) {
       if (e instanceof HttpError) return json({ ok: false, error: e.message }, e.status);
       console.error(e);
-      return json({ ok: false, error: e.message || 'Server error' }, 500);
+      const where = new URL(request.url).pathname;
+      return json({ ok: false, error: `${e.message || 'Server error'} (route ${where}, build ${INK_BUILD})` }, 500);
     }
   },
   async scheduled(event, env, ctx) { ctx.waitUntil(runCron(env, ctx)); }
