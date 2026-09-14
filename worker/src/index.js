@@ -24,7 +24,7 @@ const Templates = globalThis.InkTemplates;
 // ───────────────────────────────────────────────────────────── utilities ──
 
 const enc = new TextEncoder();
-const INK_BUILD = '2026-09-14.2';
+const INK_BUILD = '2026-09-14.3';
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
@@ -771,7 +771,10 @@ async function aiDraft(env, author, { templateId, purpose, brief, tone, subjectH
 
 async function statsSummary(db, uid) {
   const campaigns = (await db.query(`authors/${uid}`, 'campaigns', { orderBy: [['sentAt', 'desc']], limit: 40 })).filter(c => c.status === 'sent').slice(0, 12);
-  const days = await db.query(`authors/${uid}`, 'metricsDaily', { orderBy: [['__name__', 'desc']], limit: 90 });
+  // metricsDaily ids are YYYY-MM-DD. The REST API rejects a DESCENDING walk over __name__ ("requires an index",
+  // with a useless index link), so walk ascending from the cutoff date instead.
+  const from = addDays(nowIso(), -90).slice(0, 10);
+  const days = await db.query(`authors/${uid}`, 'metricsDaily', { orderBy: [['__name__', 'asc']], startAfter: [{ referenceValue: `${db.docRoot}/authors/${uid}/metricsDaily/${from}` }], limit: 120 });
   const lines = campaigns.map(c => {
     const s = c.stats || {}; const r = s.sent || 1;
     return `${(c.sentAt || '').slice(0, 10)} "${c.subject}" — sent ${s.sent || 0}, delivered ${s.delivered || 0}, opens ${s.uniqueOpens || 0} (${Math.round(100 * (s.uniqueOpens || 0) / r)}%), clicks ${s.uniqueClicks || 0} (${Math.round(100 * (s.uniqueClicks || 0) / r)}%), unsubscribes ${s.unsubscribed || 0}, bounces ${s.bounced || 0}, complaints ${s.complained || 0}`;

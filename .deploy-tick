@@ -1,9 +1,8 @@
 # Ink deploy canary. Claude rewrites this file after a substantial change; InkWatch (scripts\ink-watch.ps1)
 # notices the new modification time and runs scripts\ink-push.ps1: commit + push, Firestore rules, Worker.
 # subject: becomes the commit subject; everything after body: becomes the commit body.
-last_tick: 2026-09-14T15:05:00Z
-subject: Worker: name the query and route in Firestore errors; build stamp on /health
+last_tick: 2026-09-14T15:20:00Z
+subject: Fix "query requires an index" on Ask Ink for insights
 body:
-- Firestore query failures now say which collection/filters/order produced them and which route was running
-- /health reports the build stamp so a stale deploy is obvious
-- ink-push: rules failure no longer blocks the Worker deploy
+- statsSummary walked metricsDaily by __name__ descending, which the Firestore REST API refuses; now ascending from a 90-day cutoff
+- Also fixes the 48h send reports, which use the same summary
