@@ -98,11 +98,12 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "git push failed" }
     Write-Host "pushed. GitHub Pages republishes ink.jacobsiler.com in about a minute."
 
-    # -- firestore rules --------------------------------------------------
+    # -- firestore rules (failure is reported but does not block the Worker deploy) --
+    $failures = @()
     Step "firestore rules"
     if (Get-Command firebase -ErrorAction SilentlyContinue) {
-        & firebase deploy --only firestore:rules --project miscellaneous-117e9 --non-interactive | Out-Host
-        if ($LASTEXITCODE -ne 0) { throw "firebase rules deploy failed (run: firebase login)" }
+        & firebase deploy --only firestore:rules --project miscellaneous-117e9 --non-interactive 2>&1 | Out-Host
+        if ($LASTEXITCODE -ne 0) { $failures += "firestore rules deploy failed (try: firebase login --reauth)"; Write-Host $failures[-1] -ForegroundColor Red }
     } else { Write-Host "firebase CLI not found - skipped (npm i -g firebase-tools)" -ForegroundColor Yellow }
 
     # -- worker -----------------------------------------------------------
@@ -110,17 +111,22 @@ try {
     if (Test-Path 'worker\wrangler.toml') {
         Push-Location 'worker'
         try {
-            & npm install --no-audit --no-fund --loglevel=error | Out-Host
-            & npx wrangler deploy | Out-Host
+            & npm install --no-audit --no-fund --loglevel=error 2>&1 | Out-Host
+            & npx wrangler deploy 2>&1 | Out-Host
             if ($LASTEXITCODE -ne 0) {
                 Write-Host "first attempt failed - retrying in 5s" -ForegroundColor Yellow
                 Start-Sleep -Seconds 5
-                & npx wrangler deploy | Out-Host
-                if ($LASTEXITCODE -ne 0) { throw "wrangler deploy failed (run: npx wrangler login)" }
+                & npx wrangler deploy 2>&1 | Out-Host
+                if ($LASTEXITCODE -ne 0) { $failures += "wrangler deploy failed (try: npx wrangler login)"; Write-Host $failures[-1] -ForegroundColor Red }
             }
         } finally { Pop-Location }
     } else { Write-Host "worker\wrangler.toml not found - skipped" -ForegroundColor Yellow }
 
+    if ($failures.Count) {
+        Write-Host ""; Write-Host "=== Ink push: pushed to GitHub, but: ===" -ForegroundColor Red
+        $failures | ForEach-Object { Write-Host "  - $_" -ForegroundColor Red }
+        Stop-Here 1
+    }
     Write-Host ""; Write-Host "=== Ink push complete ===" -ForegroundColor Green
     Stop-Here 0
 } catch {
