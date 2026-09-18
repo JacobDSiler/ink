@@ -814,10 +814,27 @@ function edWrap(before, after, placeholder) {
   const wrapped = sel.split(/(\n{2,})/).map((part, i) => (i % 2 === 1 || !part) ? part : before + part + after).join('');
   edReplaceSelection(wrapped, 0, wrapped.length);
 }
-/** Inserts a block-level template (heading/quote/divider/button/list), padding it with blank
- *  lines so it becomes its own paragraph per the render.js contract, regardless of what's
- *  around the cursor. selOffset/selLen (into `template`) pick what gets selected afterward. */
-function edInsertBlock(template, selOffset, selLen) {
+/** Inserts a block-level template (heading/quote/divider/button/list) AT A POINT — never
+ *  deleting anything — padding it with blank lines so it becomes its own paragraph per the
+ *  render.js contract, regardless of what's around it. Used for blocks that have no text
+ *  slot of their own to absorb a selection into (Divider, the ready-made Keep-me button). */
+function edInsertBlockAt(pos, template, selOffset, selLen) {
+  const el = edEl(); if (!el) return;
+  const value = el.value;
+  const before = value.slice(0, pos), after = value.slice(pos);
+  const prefix = before === '' ? '' : before.endsWith('\n\n') ? '' : before.endsWith('\n') ? '\n' : '\n\n';
+  const suffix = after === '' ? '' : after.startsWith('\n\n') ? '' : after.startsWith('\n') ? '\n' : '\n\n';
+  el.value = before + prefix + template + suffix + after;
+  const base = pos + prefix.length;
+  const so = selOffset == null ? template.length : selOffset, sl = selLen == null ? 0 : selLen;
+  edFocusRange(el, base + so, base + so + sl);
+  edFireInput();
+}
+/** Replaces the current selection with a block-level template that the selection has already
+ *  been folded into (a heading title, quoted lines, list items) — so the selected text is
+ *  never lost, just re-shaped. Pads with blank lines so it lands as its own paragraph.
+ *  selOffset/selLen (into `template`) pick what gets selected afterward. */
+function edReplaceWithBlock(template, selOffset, selLen) {
   const el = edEl(); if (!el) return;
   const s = el.selectionStart, e = el.selectionEnd, value = el.value;
   const before = value.slice(0, s), after = value.slice(e);
@@ -829,12 +846,27 @@ function edInsertBlock(template, selOffset, selLen) {
   edFocusRange(el, base + so, base + so + sl);
   edFireInput();
 }
+/** For quote/list: turns every line of the current selection into its own "> " or "- " line
+ *  (falling back to placeholder lines when nothing is selected), so a whole passage can be
+ *  turned into a quote or list in one click without losing a word of it. */
+function edLineBlock(linePrefix, placeholderLines) {
+  const el = edEl(); if (!el) return;
+  const sel = el.value.slice(el.selectionStart, el.selectionEnd);
+  const lines = sel ? sel.replace(/\n{2,}/g, '\n').split('\n').filter((l) => l.trim() !== '') : [];
+  const body = (lines.length ? lines : placeholderLines).map((l) => linePrefix + l).join('\n');
+  edReplaceWithBlock(body, 0, body.length);
+}
 ink.edBold = () => edWrap('**', '**', 'bold text');
 ink.edItalic = () => edWrap('*', '*', 'italic text');
-ink.edHeading = () => edInsertBlock('## Heading', 3, 7);
-ink.edQuote = () => edInsertBlock('> Quoted line', 2, 12);
-ink.edDivider = () => edInsertBlock('---');
-ink.edList = () => edInsertBlock('- First item\n- Second item\n- Third item', 2, 10);
+ink.edHeading = () => {
+  const el = edEl(); if (!el) return;
+  const sel = el.value.slice(el.selectionStart, el.selectionEnd);
+  const text = (sel.replace(/\s*\n+\s*/g, ' ').trim()) || 'Heading';
+  edReplaceWithBlock('## ' + text, 3, text.length);
+};
+ink.edQuote = () => edLineBlock('> ', ['Quoted line']);
+ink.edList = () => edLineBlock('- ', ['First item', 'Second item', 'Third item']);
+ink.edDivider = () => { const el = edEl(); if (!el) return; edInsertBlockAt(el.selectionEnd, '---'); };
 ink.edLink = () => {
   const el = edEl(); if (!el) return;
   const sel = el.value.slice(el.selectionStart, el.selectionEnd);
@@ -845,16 +877,24 @@ ink.edLink = () => {
 ink.edButton = () => {
   const el = edEl(); if (!el) return;
   const sel = el.value.slice(el.selectionStart, el.selectionEnd);
-  const label = sel || 'Button label';
+  const label = (sel.replace(/\s*\n+\s*/g, ' ').trim()) || 'Button label';
   const tpl = '[button: ' + label + '](https://)';
-  edInsertBlock(tpl, tpl.indexOf('](') + 2, 'https://'.length);
+  edReplaceWithBlock(tpl, tpl.indexOf('](') + 2, 'https://'.length);
 };
 ink.edImage = () => {
-  const tpl = '![Description of the image](https://)';
-  edInsertBlock(tpl, tpl.indexOf('](') + 2, 'https://'.length);
+  const el = edEl(); if (!el) return;
+  const sel = el.value.slice(el.selectionStart, el.selectionEnd);
+  const alt = (sel.replace(/\s*\n+\s*/g, ' ').trim()) || 'Description of the image';
+  const tpl = '![' + alt + '](https://)';
+  edReplaceWithBlock(tpl, tpl.indexOf('](') + 2, 'https://'.length);
 };
 ink.edTag = (tag) => edReplaceSelection('{{' + tag + '}}');
-ink.edKeepButton = () => edInsertBlock('[button: Yes, keep me on the list]({{keep_url}})');
+ink.edKeepButton = () => {
+  const el = edEl(); if (!el) return;
+  const sel = el.value.slice(el.selectionStart, el.selectionEnd);
+  const label = (sel.replace(/\s*\n+\s*/g, ' ').trim()) || 'Yes, keep me on the list';
+  edReplaceWithBlock('[button: ' + label + ']({{keep_url}})');
+};
 ink.edUnsubLink = () => {
   const el = edEl(); if (!el) return;
   const sel = el.value.slice(el.selectionStart, el.selectionEnd);

@@ -1,10 +1,11 @@
 # Ink deploy canary. Claude rewrites this file after a substantial change; InkWatch (scripts\ink-watch.ps1)
 # notices the new modification time and runs scripts\ink-push.ps1: commit + push, Firestore rules, Worker.
 # subject: becomes the commit subject; everything after body: becomes the commit body.
-last_tick: 2026-09-18T11:45:00Z
-subject: Fix bold/italic breaking across paragraphs (toolbar + renderer)
+last_tick: 2026-09-18T12:05:00Z
+subject: Toolbar: Heading/Quote/Divider/List/Button/Image/Keep-me no longer eat the selection
 body:
-- Root cause: render.js pairs **/* markers only WITHIN a single paragraph (it splits the body into blocks on blank lines before it ever inspects markers). The new toolbar's wrap button only placed the marker at the outer edges of the selection, so selecting more than one paragraph and clicking Bold/Italic stranded an opening marker in the first paragraph and a closing one in the last, with nothing to pair against in either -- exactly the "shows up literally" bug from the screenshot.
-- Fix: edWrap() now wraps every paragraph inside the selection separately, so multi-paragraph selections (a whole italicized excerpt, for example) always render correctly.
-- Also fixed italic in render.js itself to allow a soft line break (single \n) inside the emphasis, matching how bold already worked -- a real paragraph break (blank line) still can never be crossed, since renderBlocks() splits on that before inline() runs.
-- Cleaned up the toolbar CSS (the group divider lines looked misaligned once the buttons wrapped to a second row on a narrower screen).
+- Root cause: those buttons used a fixed template (e.g. "> Quoted line") and inserted it over whatever range was selected, silently discarding the selected text instead of using it.
+- Quote and List now fold every line of the selection into "> "/"- " lines (falling back to placeholder lines only when nothing is selected), so a whole passage becomes a quote or list without losing a word.
+- Heading, Button, Image and the Keep-me button now use the selection as their title/label/alt-text when there is one, instead of ignoring it.
+- Divider has no text slot to absorb a selection into, so it no longer touches the selection at all -- it inserts itself right after the selection, leaving the selected text exactly as it was.
+- Verified all of the above (with and without a selection, single- and multi-line) against the shared renderer before shipping.
