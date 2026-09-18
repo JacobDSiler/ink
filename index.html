@@ -134,6 +134,14 @@
   .chip { display:inline-block; font-size:.72rem; letter-spacing:.06em; text-transform:uppercase; padding:.15em .6em; border-radius:10px; border:1px solid var(--border); color:var(--parch-dark); margin:.1em .2em .1em 0; }
   .chip.on { background:rgba(184,134,11,.15); color:var(--brass-light); border-color:var(--brass); cursor:pointer; }
   .chip.click { cursor:pointer; }
+
+  /* ── Editor formatting toolbar ── */
+  .ed-toolbar { display:flex; flex-wrap:wrap; align-items:center; gap:.3rem; padding:.5rem .1rem; margin-bottom:.35rem; border-bottom:1px solid var(--border); }
+  .ed-toolbar .grp { display:flex; flex-wrap:wrap; gap:.25rem; padding-right:.5rem; margin-right:.25rem; border-right:1px solid var(--border); }
+  .ed-toolbar .grp:last-child { border-right:0; }
+  .ed-tbtn { display:inline-flex; align-items:center; justify-content:center; min-width:2rem; height:2rem; padding:0 .55rem; border-radius:var(--radius); border:1px solid transparent; background:transparent; color:var(--parch-dark); font-family:var(--text); font-size:.85rem; cursor:pointer; transition:all .15s; white-space:nowrap; }
+  .ed-tbtn:hover { color:var(--brass-light); background:rgba(255,255,255,.05); border-color:var(--border); }
+  .ed-tbtn b, .ed-tbtn i { font-family:Georgia,serif; }
   .status { font-size:.7rem; letter-spacing:.1em; text-transform:uppercase; padding:.15em .55em; border-radius:2px; }
   .status.draft { background:rgba(245,234,208,.08); color:var(--parch-dark); }
   .status.scheduled, .status.approved, .status.pending { background:rgba(91,168,196,.15); color:var(--cav-glow); }
@@ -702,7 +710,8 @@ function renderCampaign(id) {
         <label>Subject line ${locked ? '' : `<button class="btn btn-sm btn-ghost" style="float:right;margin-top:-4px" onclick="ink.aiSubjects('${id}',this)">✦ Suggest subjects</button>`}</label><input type="text" id="ed-subject" value="${esc(c.subject || '')}" ${locked ? 'disabled' : ''} style="font-family:var(--serif);font-size:1.15rem">
         <div id="ed-alts">${(c.subjectAlternatives || []).length ? c.subjectAlternatives.map(s => `<button class="subj-alt" onclick="ink.useSubject(this)">${esc(s)}</button>`).join('') : ''}</div>
         <label>Preview text <span class="hint">(the grey line after the subject in the inbox)</span></label><input type="text" id="ed-preview" value="${esc(c.previewText || '')}" ${locked ? 'disabled' : ''}>
-        <label>Body <span class="hint">— **bold**, *italic*, [link](url), [button: Label](url), ## heading, > quote, ---, {{first_name}}, {{keep_url}} (one-click "keep me")</span></label>
+        <label>Body <span class="hint">— select text and click a button to format it, or click with nothing selected to insert</span></label>
+        ${locked ? '' : edToolbar()}
         <textarea id="ed-body" class="body" ${locked ? 'disabled' : ''}>${esc(c.body || '')}</textarea>
         ${c.aiNotes ? `<div class="msg msg-info visible">Ink: ${esc(c.aiNotes)}</div>` : ''}
         ${locked ? '' : `<div class="row" style="margin-top:.75rem"><div><input type="text" id="ed-polish" placeholder="Ask Ink to tweak: 'shorter', 'warmer opening', 'add a line about the audiobook'…"></div><div class="auto"><button class="btn" onclick="ink.aiPolish('${id}',this)">✦ Tweak</button></div></div>`}
@@ -745,6 +754,108 @@ function campaignStatsCard(c) {
     ${c.report?.insight ? `<div class="msg msg-info visible">Ink: ${esc(c.report.insight)}</div>` : `<div class="small dim" style="margin-top:.6rem">Opens and clicks arrive as readers open the email. Ink sends you a report after 48 hours.</div>`}
   </div></div>`;
 }
+// ───────────────────────────────────────────────────── formatting toolbar ──
+// Inserts/wraps the exact markup shared/render.js understands, so authors never have to
+// know the syntax by heart. "Wrap" buttons (bold, italic, link, quote-line) act on a text
+// selection when there is one; every button falls back to inserting a sensible placeholder
+// (auto-selected) when nothing is selected, so the author can just start typing over it.
+function edToolbar() {
+  const fmt = [
+    ['<b>B</b>', 'Bold — wraps the selection in **bold**', "ink.edBold()"],
+    ['<i>I</i>', 'Italic — wraps the selection in *italic*', "ink.edItalic()"],
+    ['H', 'Heading — a section title', "ink.edHeading()"],
+    ['”', 'Quote — an indented, italicized line', "ink.edQuote()"],
+    ['—', 'Divider — a horizontal rule between sections', "ink.edDivider()"],
+    ['≡', 'Bulleted list', "ink.edList()"],
+  ];
+  const ins = [
+    ['Link', 'Turn the selection into a clickable link', "ink.edLink()"],
+    ['Button', 'A tappable call-to-action button on its own line', "ink.edButton()"],
+    ['Image', 'Embed an image by URL', "ink.edImage()"],
+  ];
+  const tags = [
+    ["Reader's name", 'Inserts the reader\'s first name — falls back to "friend" if unknown', "ink.edTag('first_name')"],
+    ['Pen name', 'Your pen name', "ink.edTag('pen_name')"],
+    ['Website link', 'Your website URL', "ink.edTag('web_url')"],
+    ['Buy link', 'Your book\'s buy link', "ink.edTag('buy_url')"],
+  ];
+  const special = [
+    ['Keep-me button', 'One-click "yes, keep me on the list" button — for revival/re-permission letters', "ink.edKeepButton()"],
+    ['Unsubscribe link', 'An inline unsubscribe link (one is always added to the footer automatically too)', "ink.edUnsubLink()"],
+  ];
+  const grp = (items) => `<div class="grp">${items.map(([label, title, fn]) => `<button type="button" class="ed-tbtn" title="${esc(title)}" onclick="${fn}">${label}</button>`).join('')}</div>`;
+  return `<div class="ed-toolbar">${grp(fmt)}${grp(ins)}${grp(tags)}${grp(special)}</div>`;
+}
+function edEl() { return $('ed-body'); }
+function edFireInput() { const el = edEl(); if (el) el.dispatchEvent(new Event('input')); }
+function edFocusRange(el, start, end) { el.focus(); el.setSelectionRange(start, end); }
+/** Replaces the current selection with `text`, then selects the sub-range [selOffset, selOffset+selLen)
+ *  within it (defaults to placing the cursor right after the inserted text). */
+function edReplaceSelection(text, selOffset, selLen) {
+  const el = edEl(); if (!el) return;
+  const s = el.selectionStart, e = el.selectionEnd, value = el.value;
+  el.value = value.slice(0, s) + text + value.slice(e);
+  const so = selOffset == null ? text.length : selOffset;
+  const sl = selLen == null ? 0 : selLen;
+  edFocusRange(el, s + so, s + so + sl);
+  edFireInput();
+}
+/** Wraps the selection in `before`/`after` (e.g. ** **). With nothing selected, inserts
+ *  before+placeholder+after and selects the placeholder so typing replaces it. */
+function edWrap(before, after, placeholder) {
+  const el = edEl(); if (!el) return;
+  const sel = el.value.slice(el.selectionStart, el.selectionEnd);
+  const text = sel || placeholder;
+  edReplaceSelection(before + text + after, before.length, text.length);
+}
+/** Inserts a block-level template (heading/quote/divider/button/list), padding it with blank
+ *  lines so it becomes its own paragraph per the render.js contract, regardless of what's
+ *  around the cursor. selOffset/selLen (into `template`) pick what gets selected afterward. */
+function edInsertBlock(template, selOffset, selLen) {
+  const el = edEl(); if (!el) return;
+  const s = el.selectionStart, e = el.selectionEnd, value = el.value;
+  const before = value.slice(0, s), after = value.slice(e);
+  const prefix = before === '' ? '' : before.endsWith('\n\n') ? '' : before.endsWith('\n') ? '\n' : '\n\n';
+  const suffix = after === '' ? '' : after.startsWith('\n\n') ? '' : after.startsWith('\n') ? '\n' : '\n\n';
+  el.value = before + prefix + template + suffix + after;
+  const base = s + prefix.length;
+  const so = selOffset == null ? 0 : selOffset, sl = selLen == null ? template.length : selLen;
+  edFocusRange(el, base + so, base + so + sl);
+  edFireInput();
+}
+ink.edBold = () => edWrap('**', '**', 'bold text');
+ink.edItalic = () => edWrap('*', '*', 'italic text');
+ink.edHeading = () => edInsertBlock('## Heading', 3, 7);
+ink.edQuote = () => edInsertBlock('> Quoted line', 2, 12);
+ink.edDivider = () => edInsertBlock('---');
+ink.edList = () => edInsertBlock('- First item\n- Second item\n- Third item', 2, 10);
+ink.edLink = () => {
+  const el = edEl(); if (!el) return;
+  const sel = el.value.slice(el.selectionStart, el.selectionEnd);
+  const text = sel || 'link text';
+  const tpl = '[' + text + '](https://)';
+  edReplaceSelection(tpl, tpl.indexOf('](') + 2, 'https://'.length);
+};
+ink.edButton = () => {
+  const el = edEl(); if (!el) return;
+  const sel = el.value.slice(el.selectionStart, el.selectionEnd);
+  const label = sel || 'Button label';
+  const tpl = '[button: ' + label + '](https://)';
+  edInsertBlock(tpl, tpl.indexOf('](') + 2, 'https://'.length);
+};
+ink.edImage = () => {
+  const tpl = '![Description of the image](https://)';
+  edInsertBlock(tpl, tpl.indexOf('](') + 2, 'https://'.length);
+};
+ink.edTag = (tag) => edReplaceSelection('{{' + tag + '}}');
+ink.edKeepButton = () => edInsertBlock('[button: Yes, keep me on the list]({{keep_url}})');
+ink.edUnsubLink = () => {
+  const el = edEl(); if (!el) return;
+  const sel = el.value.slice(el.selectionStart, el.selectionEnd);
+  const text = sel || 'unsubscribe';
+  edReplaceSelection('[' + text + ']({{unsubscribe_url}})', 0, ('[' + text + ']({{unsubscribe_url}})').length);
+};
+
 function editorValues() { return { title: $('ed-title')?.value.trim(), subject: $('ed-subject')?.value.trim(), previewText: $('ed-preview')?.value.trim(), body: $('ed-body')?.value, brief: $('ed-brief')?.value.trim() }; }
 async function saveEditor(id) {
   if (!editorState.dirty) return; const v = editorValues(); if (v.title === undefined) return;

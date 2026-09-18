@@ -1,8 +1,9 @@
 # Ink deploy canary. Claude rewrites this file after a substantial change; InkWatch (scripts\ink-watch.ps1)
 # notices the new modification time and runs scripts\ink-push.ps1: commit + push, Firestore rules, Worker.
 # subject: becomes the commit subject; everything after body: becomes the commit body.
-last_tick: 2026-09-14T15:20:00Z
-subject: Fix "query requires an index" on Ask Ink for insights
+last_tick: 2026-09-18T11:32:24Z
+subject: Campaign editor: formatting toolbar (bold/italic wrap, links, buttons, merge tags)
 body:
-- statsSummary walked metricsDaily by __name__ descending, which the Firestore REST API refuses; now ascending from a 90-day cutoff
-- Also fixes the 48h send reports, which use the same summary
+- New toolbar above the letter body: Bold/Italic wrap selected text (or insert with the word pre-selected so you can type over it); Heading, Quote, Divider, and Bulleted list insert as their own paragraph; Link and Button prompt you to paste a URL over a placeholder; Image inserts an image placeholder.
+- One-click tag buttons for Reader's name, Pen name, Website link, Buy link, a ready-made "Keep me on the list" button, and an inline Unsubscribe link -- no more remembering {{curly}} syntax.
+- Audited the send pipeline end to end (editor -> Firestore -> Worker -> shared/render.js) for the "bold/italic shows literally" report: render.js correctly converts **bold**/*italic* today (confirmed with a live test against the deployed build). Most likely cause was mismatched/odd asterisks typed by hand -- the new toolbar always emits correctly paired markup, so this class of mistake goes away.
