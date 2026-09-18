@@ -52,7 +52,11 @@
       return '<a href="' + url + '" style="color:' + brand.link + ';text-decoration:underline;">' + t + '</a>';
     });
     out = out.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-    out = out.replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>');
+    // No \n exclusion here (matches the bold pattern above): a paragraph can contain a soft
+    // line break (single \n) and italics should still span it. A real paragraph break is a
+    // blank line, which renderBlocks() already splits on before inline() ever sees the text,
+    // so this can never accidentally reach across two paragraphs.
+    out = out.replace(/(^|[^*])\*([^*]+)\*/g, '$1<em>$2</em>');
     return out;
   }
 

@@ -136,12 +136,11 @@
   .chip.click { cursor:pointer; }
 
   /* ── Editor formatting toolbar ── */
-  .ed-toolbar { display:flex; flex-wrap:wrap; align-items:center; gap:.3rem; padding:.5rem .1rem; margin-bottom:.35rem; border-bottom:1px solid var(--border); }
-  .ed-toolbar .grp { display:flex; flex-wrap:wrap; gap:.25rem; padding-right:.5rem; margin-right:.25rem; border-right:1px solid var(--border); }
-  .ed-toolbar .grp:last-child { border-right:0; }
-  .ed-tbtn { display:inline-flex; align-items:center; justify-content:center; min-width:2rem; height:2rem; padding:0 .55rem; border-radius:var(--radius); border:1px solid transparent; background:transparent; color:var(--parch-dark); font-family:var(--text); font-size:.85rem; cursor:pointer; transition:all .15s; white-space:nowrap; }
+  .ed-toolbar { display:flex; flex-wrap:wrap; align-items:flex-start; row-gap:.4rem; column-gap:.9rem; padding:.5rem .1rem .6rem; margin-bottom:.35rem; border-bottom:1px solid var(--border); }
+  .ed-toolbar .grp { display:flex; flex-wrap:wrap; align-items:center; gap:.25rem; }
+  .ed-tbtn { display:inline-flex; align-items:center; justify-content:center; box-sizing:border-box; min-width:2rem; height:2rem; padding:0 .55rem; border-radius:var(--radius); border:1px solid transparent; background:transparent; color:var(--parch-dark); font-family:var(--text); font-size:.85rem; line-height:1; cursor:pointer; transition:all .15s; white-space:nowrap; }
   .ed-tbtn:hover { color:var(--brass-light); background:rgba(255,255,255,.05); border-color:var(--border); }
-  .ed-tbtn b, .ed-tbtn i { font-family:Georgia,serif; }
+  .ed-tbtn b, .ed-tbtn i { font-family:Georgia,serif; font-size:1rem; line-height:1; }
   .status { font-size:.7rem; letter-spacing:.1em; text-transform:uppercase; padding:.15em .55em; border-radius:2px; }
   .status.draft { background:rgba(245,234,208,.08); color:var(--parch-dark); }
   .status.scheduled, .status.approved, .status.pending { background:rgba(91,168,196,.15); color:var(--cav-glow); }
@@ -801,12 +800,19 @@ function edReplaceSelection(text, selOffset, selLen) {
   edFireInput();
 }
 /** Wraps the selection in `before`/`after` (e.g. ** **). With nothing selected, inserts
- *  before+placeholder+after and selects the placeholder so typing replaces it. */
+ *  before+placeholder+after and selects the placeholder so typing replaces it.
+ *  render.js pairs bold/italic markers only WITHIN a single paragraph (it splits the body on
+ *  blank lines into separate blocks before it ever looks at the markers), so wrapping a
+ *  selection that spans more than one paragraph at just its outer edges would strand a marker
+ *  in the first paragraph and another in the last, with nothing to pair against in between.
+ *  Wrap every paragraph in the selection separately instead, so it always renders correctly
+ *  regardless of how much text is selected. */
 function edWrap(before, after, placeholder) {
   const el = edEl(); if (!el) return;
   const sel = el.value.slice(el.selectionStart, el.selectionEnd);
-  const text = sel || placeholder;
-  edReplaceSelection(before + text + after, before.length, text.length);
+  if (!sel) { edReplaceSelection(before + placeholder + after, before.length, placeholder.length); return; }
+  const wrapped = sel.split(/(\n{2,})/).map((part, i) => (i % 2 === 1 || !part) ? part : before + part + after).join('');
+  edReplaceSelection(wrapped, 0, wrapped.length);
 }
 /** Inserts a block-level template (heading/quote/divider/button/list), padding it with blank
  *  lines so it becomes its own paragraph per the render.js contract, regardless of what's

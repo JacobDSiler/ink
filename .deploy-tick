@@ -1,9 +1,10 @@
 # Ink deploy canary. Claude rewrites this file after a substantial change; InkWatch (scripts\ink-watch.ps1)
 # notices the new modification time and runs scripts\ink-push.ps1: commit + push, Firestore rules, Worker.
 # subject: becomes the commit subject; everything after body: becomes the commit body.
-last_tick: 2026-09-18T11:32:24Z
-subject: Campaign editor: formatting toolbar (bold/italic wrap, links, buttons, merge tags)
+last_tick: 2026-09-18T11:45:00Z
+subject: Fix bold/italic breaking across paragraphs (toolbar + renderer)
 body:
-- New toolbar above the letter body: Bold/Italic wrap selected text (or insert with the word pre-selected so you can type over it); Heading, Quote, Divider, and Bulleted list insert as their own paragraph; Link and Button prompt you to paste a URL over a placeholder; Image inserts an image placeholder.
-- One-click tag buttons for Reader's name, Pen name, Website link, Buy link, a ready-made "Keep me on the list" button, and an inline Unsubscribe link -- no more remembering {{curly}} syntax.
-- Audited the send pipeline end to end (editor -> Firestore -> Worker -> shared/render.js) for the "bold/italic shows literally" report: render.js correctly converts **bold**/*italic* today (confirmed with a live test against the deployed build). Most likely cause was mismatched/odd asterisks typed by hand -- the new toolbar always emits correctly paired markup, so this class of mistake goes away.
+- Root cause: render.js pairs **/* markers only WITHIN a single paragraph (it splits the body into blocks on blank lines before it ever inspects markers). The new toolbar's wrap button only placed the marker at the outer edges of the selection, so selecting more than one paragraph and clicking Bold/Italic stranded an opening marker in the first paragraph and a closing one in the last, with nothing to pair against in either -- exactly the "shows up literally" bug from the screenshot.
+- Fix: edWrap() now wraps every paragraph inside the selection separately, so multi-paragraph selections (a whole italicized excerpt, for example) always render correctly.
+- Also fixed italic in render.js itself to allow a soft line break (single \n) inside the emphasis, matching how bold already worked -- a real paragraph break (blank line) still can never be crossed, since renderBlocks() splits on that before inline() runs.
+- Cleaned up the toolbar CSS (the group divider lines looked misaligned once the buttons wrapped to a second row on a narrower screen).
