@@ -24,7 +24,7 @@ const Templates = globalThis.InkTemplates;
 // ───────────────────────────────────────────────────────────── utilities ──
 
 const enc = new TextEncoder();
-const INK_BUILD = '2026-09-14.3';
+const INK_BUILD = '2026-09-22.1';
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
@@ -1067,6 +1067,29 @@ async function route(request, env, ctx) {
     return json({ ok: true, status: r.status, already: !!r.already });
   }
 
+  // Public landing pages (sales/sign-up pages authors build in Ink and share themselves — bio link,
+  // socials, the back of a book). /p/:slug is looked up in pageSlugs (claimed at publish time, below).
+  if (parts[0] === 'p' && parts[1]) {
+    const slug = decodeURIComponent(parts[1]).toLowerCase();
+    const slugDoc = await db.get(`pageSlugs/${slug}`);
+    if (!slugDoc) return m === 'GET' ? html(pageShell('Not found', '<h1>This page is not live</h1><p>The link may be old, or the page has been unpublished.</p>'), 404) : json({ ok: false, error: 'Unknown page' }, 404);
+    const [author, page] = await Promise.all([db.get(`authors/${slugDoc.uid}`), db.get(`authors/${slugDoc.uid}/pages/${slugDoc.pid}`)]);
+    if (!author || !page || page.status !== 'published') return m === 'GET' ? html(pageShell('Not found', '<h1>This page is not live</h1><p>The link may be old, or the page has been unpublished.</p>'), 404) : json({ ok: false, error: 'Unknown page' }, 404);
+    if (m === 'GET') {
+      ctx.waitUntil(db.increment(`authors/${slugDoc.uid}/pages/${slugDoc.pid}`, { views: 1 }).catch(() => { }));
+      return html(Render.renderLandingPage({
+        title: page.title || page.headline, headline: page.headline, body: page.body, coverImage: page.coverImage,
+        brand: author.brand, author: { penName: author.penName, webUrl: author.webUrl },
+        kind: page.kind, ctaLabel: page.ctaLabel, ctaUrl: page.ctaUrl
+      }).html);
+    }
+    if (page.kind !== 'signup') return json({ ok: false, error: 'This page does not collect sign-ups.' }, 400);
+    const body = await readBody(request);
+    if (body.website) return json({ ok: true, status: 'active' }); // honeypot
+    const r = await addSubscriber(env, db, slugDoc.uid, author, { email: body.email, name: body.name, tags: page.tags || [], source: `page:${slug}` });
+    return json({ ok: true, status: r.status, already: !!r.already });
+  }
+
   if (parts[0] === 'confirm' && parts[1]) {
     const p = await verifyToken(env, parts[1]);
     if (!p || p.k !== 'confirm') return html(pageShell('Link expired', '<h1>This link has expired</h1><p>Please sign up again to receive a fresh confirmation email.</p>'), 400);
@@ -1248,6 +1271,36 @@ async function route(request, env, ctx) {
     const n = await countActive(db, uid);
     await db.set(`authors/${uid}`, { subscriberCount: n, updatedAt: nowIso() });
     return json({ ok: true, subscriberCount: n });
+  }
+
+  // ── landing pages ──
+  // Pages themselves (title/headline/body/kind/cta) are created and edited directly from the app
+  // against Firestore, exactly like campaigns — firestore.rules' generic authors/{uid}/{collection}
+  // wildcard already covers authors/{uid}/pages/{pid}. The Worker only handles the one thing a
+  // client can't safely do itself: claiming a public slug (must be globally unique) and publishing.
+  if (parts[0] === 'pages' && parts[1] && parts[2] === 'publish' && m === 'POST') {
+    const pid = parts[1];
+    const page = await db.get(`authors/${uid}/pages/${pid}`);
+    if (!page) throw new HttpError(404, 'Page not found');
+    const slug = String(body.slug || page.slug || '').toLowerCase().trim().replace(/[^a-z0-9-]/g, '');
+    if (slug.length < 3) bad('Give the page an address of at least 3 characters (letters, numbers, hyphens).');
+    if (!page.headline || !String(page.headline).trim()) bad('Give the page a headline before publishing.');
+    if (page.kind === 'buy' && !/^https?:\/\//i.test(page.ctaUrl || '')) bad('Add a link for the button before publishing.');
+    const existing = await db.get(`pageSlugs/${slug}`);
+    if (existing && !(existing.uid === uid && existing.pid === pid)) bad('That address is taken — try another.');
+    if (page.slug && page.slug !== slug) await db.delete(`pageSlugs/${page.slug}`);
+    const t = nowIso();
+    await db.set(`pageSlugs/${slug}`, { uid, pid, updatedAt: t });
+    await db.set(`authors/${uid}/pages/${pid}`, { slug, status: 'published', publishedAt: page.publishedAt || t, updatedAt: t });
+    return json({ ok: true, slug, url: `${env.PUBLIC_URL}/p/${slug}` });
+  }
+  if (parts[0] === 'pages' && parts[1] && parts[2] === 'unpublish' && m === 'POST') {
+    const pid = parts[1];
+    const page = await db.get(`authors/${uid}/pages/${pid}`);
+    if (!page) throw new HttpError(404, 'Page not found');
+    if (page.slug) await db.delete(`pageSlugs/${page.slug}`);
+    await db.set(`authors/${uid}/pages/${pid}`, { status: 'draft', updatedAt: nowIso() });
+    return json({ ok: true });
   }
 
   if (path === '/subscribers/add' && m === 'POST') {

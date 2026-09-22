@@ -167,14 +167,37 @@
   pre.code { padding:.75rem; overflow-x:auto; white-space:pre-wrap; word-break:break-all; }
   .kbd { color:var(--brass-light); }
 
-  /* ── Auth / onboarding ── */
-  #auth { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; padding:1.5rem; z-index:100; background:var(--ink); }
-  .auth-box { width:100%; max-width:380px; text-align:center; animation:fadeIn .6s ease; }
+  /* ── Auth / marketing ── */
+  #auth { position:fixed; inset:0; overflow-y:auto; z-index:100; background:var(--ink); }
+  .auth-box { width:100%; max-width:380px; text-align:center; animation:fadeIn .6s ease; margin:0 auto; }
   .auth-box h1 { font-size:2.4rem; letter-spacing:.2em; margin:.5rem 0 .2rem; }
   .auth-box .tag { font-size:.85rem; letter-spacing:.1em; text-transform:uppercase; color:var(--parch-dim); margin-bottom:2rem; }
   .auth-box input { text-align:center; margin-bottom:.6rem; }
   .auth-box .btn { margin-top:.4rem; }
   .auth-box .err { color:#f0a080; min-height:1.3em; font-size:.9rem; margin-top:.5rem; }
+
+  /* ── Marketing (signed-out home) ── */
+  .mkt { max-width:1080px; margin:0 auto; padding:0 1.5rem 4rem; }
+  .mkt-nav { display:flex; align-items:center; justify-content:space-between; padding:1.5rem 0; }
+  .mkt-nav .t { font-family:var(--serif); font-size:1.3rem; letter-spacing:.25em; color:var(--brass-light); }
+  .mkt-hero { text-align:center; padding:4vh 0 5vh; animation:fadeIn .6s ease; }
+  .mkt-hero h1 { font-size:clamp(1.9rem,4.5vw,3rem); font-weight:300; letter-spacing:.01em; line-height:1.2; max-width:820px; margin:1rem auto .9rem; color:var(--parch); }
+  .mkt-hero .sub { max-width:600px; margin:0 auto 1.75rem; color:var(--parch-dark); font-size:1.1rem; line-height:1.6; }
+  .mkt-cta { display:flex; gap:.75rem; justify-content:center; flex-wrap:wrap; }
+  .mkt-section { padding:4vh 0; }
+  .mkt-section h2 { text-align:center; font-size:1.6rem; font-weight:300; margin-bottom:.3rem; }
+  .mkt-section .lead { text-align:center; color:var(--parch-dark); max-width:520px; margin:0 auto 2rem; }
+  .mkt-banner { text-align:center; background:rgba(184,134,11,.08); border:1px solid var(--border); border-radius:var(--radius); padding:.6rem 1rem; font-size:.9rem; color:var(--brass-light); max-width:520px; margin:0 auto 2rem; }
+  .plan-card { background:var(--ink-mid); border:1px solid var(--border); border-radius:6px; padding:1.5rem 1.25rem; display:flex; flex-direction:column; gap:.5rem; text-align:center; }
+  .plan-card.on { border-color:var(--brass); box-shadow:0 0 0 1px var(--brass); }
+  .plan-card .n { font-family:var(--serif); font-size:1.3rem; color:var(--brass-light); }
+  .plan-card .price { font-family:var(--serif); font-size:1.6rem; color:var(--parch); margin:.2rem 0; }
+  .plan-card .price small { font-size:.6em; color:var(--parch-dim); font-weight:400; }
+  .plan-card ul { list-style:none; text-align:left; font-size:.88rem; color:var(--parch-dark); margin-top:.5rem; }
+  .plan-card li { padding:.3rem 0; border-top:1px solid rgba(184,134,11,.1); }
+  .plan-card li:first-child { border-top:0; }
+  .mkt-foot { text-align:center; padding-top:3vh; border-top:1px solid var(--border); margin-top:2vh; color:var(--parch-dim); font-size:.85rem; }
+  @media (max-width:640px) { .mkt-hero { padding:3vh 0 4vh; } }
   .wizard { max-width:640px; margin:0 auto; }
   .wizard .steps { display:flex; gap:.4rem; justify-content:center; margin-bottom:1.5rem; }
   .wizard .steps i { width:28px; height:3px; background:var(--ink-line); border-radius:2px; }
@@ -236,22 +259,66 @@
 
 <div id="loading">✦ ✦ ✦</div>
 
-<!-- ═══════════ AUTH ═══════════ -->
+<!-- ═══════════ AUTH / MARKETING ═══════════ -->
 <div id="auth" class="hidden">
-  <div class="auth-box">
+<div class="mkt">
+  <header class="mkt-nav">
+    <div class="t">✦ INK</div>
+    <a class="btn btn-sm btn-ghost" href="#signin">Sign in</a>
+  </header>
+
+  <section class="mkt-hero">
     <div class="ornament">✦ ✦ ✦</div>
-    <h1>INK</h1>
-    <div class="tag">Author list marketing</div>
-    <button class="btn btn-primary btn-block" onclick="ink.signInGoogle()">Continue with Google</button>
-    <div class="divider">or with email</div>
-    <input type="email" id="auth-email" placeholder="you@example.com" autocomplete="email">
-    <input type="password" id="auth-pass" placeholder="Password" autocomplete="current-password">
-    <button class="btn btn-block" onclick="ink.signInEmail()">Sign in</button>
-    <button class="btn btn-ghost btn-block" onclick="ink.signUpEmail()">Create an account</button>
-    <button class="btn btn-ghost btn-sm" onclick="ink.resetPassword()">Forgot password?</button>
-    <div class="err" id="auth-err"></div>
-    <p class="dim small" style="margin-top:1.5rem">Your reader list, owned by you. Letters drafted in your voice, on a schedule Ink keeps for you — and nothing is ever sent without your approval.</p><p class="dim small" style="margin-top:.75rem">Publishing on Folio? Bring your subscribers across in one import.</p><p class="dim small" style="margin-top:.75rem;font-size:.75rem">By continuing you confirm you have permission to email the readers you import. Every letter carries an unsubscribe link.</p>
-  </div>
+    <h1>The mailing list built for authors, not marketers.</h1>
+    <p class="sub">Ink drafts your letters in your voice, keeps a sending schedule for you, and never sends a word without your approval. No funnels to configure — just readers who actually want to hear from you.</p>
+    <div class="mkt-cta"><a class="btn btn-primary" href="#signin">Start free</a><a class="btn btn-ghost" href="#pricing">See plans</a></div>
+    <p class="dim small" style="margin-top:1rem">Free to start. No credit card.</p>
+  </section>
+
+  <section class="mkt-section">
+    <h2>Everything an author's list actually needs</h2>
+    <p class="lead">Nothing built for marketing agencies. Everything built for someone with books to write.</p>
+    <div class="grid grid-3">
+      <div class="tpl-card"><div class="cat">Write less</div><div class="n">Ink drafts it</div><div class="p">Tell Ink two sentences about what you want to say and it writes the full letter in your voice, from your own books and profile. You edit — Ink never sends without you.</div></div>
+      <div class="tpl-card"><div class="cat">Never spam</div><div class="n">You approve every send</div><div class="p">Nothing goes out on autopilot. Every letter, welcome email, and revival campaign waits for your one-click approval first.</div></div>
+      <div class="tpl-card"><div class="cat">Built to sell</div><div class="n">Landing pages included</div><div class="p">Give readers somewhere to land: sign-up pages and book sales pages, hosted on Ink, styled to match your letters.</div></div>
+      <div class="tpl-card"><div class="cat">Stay out of spam</div><div class="n">Deliverability, handled</div><div class="p">Quiet-reader detection, sending pace for new senders, and a revival plan for cold lists — the boring stuff that keeps you out of the junk folder.</div></div>
+      <div class="tpl-card"><div class="cat">One home</div><div class="n">Every list, one account</div><div class="p">Your author list, your publisher list, your game's list — hold them all under one login, upgrade only when you need more.</div></div>
+      <div class="tpl-card"><div class="cat">Real numbers</div><div class="n">Ink explains your analytics</div><div class="p">Opens, clicks, and unsubscribes in plain English, with a specific next action — not just a dashboard of numbers to interpret yourself.</div></div>
+    </div>
+  </section>
+
+  <section class="mkt-section" id="pricing">
+    <h2>Plans that grow with your list</h2>
+    <p class="lead">Every plan includes unlimited readers, unlimited letters, and Ink's AI drafting.</p>
+    <div class="mkt-banner">✦ Ink is in early access — every plan below is free for now. Pricing takes effect once billing goes live; early authors keep a thank-you discount.</div>
+    <div class="grid grid-3">
+      <div class="plan-card on"><div class="n">Free</div><div class="price">$0</div><ul><li>1 list</li><li>Unlimited readers &amp; letters</li><li>AI drafting &amp; welcome series</li></ul></div>
+      <div class="plan-card"><div class="n">Author</div><div class="price">Early access <small>free</small></div><ul><li>2 lists</li><li>Everything in Free</li><li>Landing pages</li></ul></div>
+      <div class="plan-card"><div class="n">Pro</div><div class="price">Early access <small>free</small></div><ul><li>5 lists</li><li>Everything in Author</li><li>Custom sending domain</li></ul></div>
+      <div class="plan-card"><div class="n">Studio</div><div class="price">Early access <small>free</small></div><ul><li>25 lists</li><li>Everything in Pro</li><li>For teams &amp; small presses</li></ul></div>
+    </div>
+  </section>
+
+  <section class="mkt-section" id="signin">
+    <div class="auth-box">
+      <div class="ornament">✦ ✦ ✦</div>
+      <h1>INK</h1>
+      <div class="tag">Author list marketing</div>
+      <button class="btn btn-primary btn-block" onclick="ink.signInGoogle()">Continue with Google</button>
+      <div class="divider">or with email</div>
+      <input type="email" id="auth-email" placeholder="you@example.com" autocomplete="email">
+      <input type="password" id="auth-pass" placeholder="Password" autocomplete="current-password">
+      <button class="btn btn-block" onclick="ink.signInEmail()">Sign in</button>
+      <button class="btn btn-ghost btn-block" onclick="ink.signUpEmail()">Create an account</button>
+      <button class="btn btn-ghost btn-sm" onclick="ink.resetPassword()">Forgot password?</button>
+      <div class="err" id="auth-err"></div>
+      <p class="dim small" style="margin-top:1.5rem">Your reader list, owned by you. Letters drafted in your voice, on a schedule Ink keeps for you — and nothing is ever sent without your approval.</p><p class="dim small" style="margin-top:.75rem">Publishing on Folio? Bring your subscribers across in one import.</p><p class="dim small" style="margin-top:.75rem;font-size:.75rem">By continuing you confirm you have permission to email the readers you import. Every letter carries an unsubscribe link.</p>
+    </div>
+  </section>
+
+  <footer class="mkt-foot"><p>Ink, by Siler Technology. Questions or issues — <a href="mailto:ink@jacobsiler.com">ink@jacobsiler.com</a></p></footer>
+</div>
 </div>
 
 <!-- ═══════════ APP ═══════════ -->
@@ -261,6 +328,7 @@
     <a class="nl" href="#dashboard" data-nav="dashboard"><span class="g">◈</span>Today</a>
     <a class="nl" href="#approvals" data-nav="approvals"><span class="g">✓</span>Approvals<span class="badge hidden" id="badge-approvals"></span></a>
     <a class="nl" href="#campaigns" data-nav="campaigns"><span class="g">✉</span>Letters</a>
+    <a class="nl" href="#pages" data-nav="pages"><span class="g">▭</span>Pages</a>
     <a class="nl" href="#plan" data-nav="plan"><span class="g">◷</span>Plan</a>
     <a class="nl" href="#readers" data-nav="readers"><span class="g">☺</span>Readers</a>
     <a class="nl" href="#templates" data-nav="templates"><span class="g">❧</span>Templates</a>
@@ -298,13 +366,14 @@ const WORKER_PRIMARY = 'https://go.jacobsiler.com';            // Ink Worker cus
 const WORKER_FALLBACK = 'https://ink-worker.jacobdsiler.workers.dev'; // used automatically if the custom domain does not resolve
 let WORKER = WORKER_PRIMARY;
 const PUBLIC = () => (S.me && S.me.publicUrl) || WORKER;  // base for join / unsubscribe links
+const SUPPORT_EMAIL = 'ink@jacobsiler.com'; // forwards to Jacob — Cloudflare Email Routing (see README)
 const firebaseConfig = { apiKey: "AIzaSyDxLI57pgS9WX1ekMerbcx8M6aVeWacpy0", authDomain: "auth.jacobsiler.com", projectId: "miscellaneous-117e9", storageBucket: "miscellaneous-117e9.firebasestorage.app", messagingSenderId: "514858431339", appId: "1:514858431339:web:8b3acbe89966b45fe3922e" };
 const fb = initializeApp(firebaseConfig);
 const auth = getAuth(fb);
 const db = getFirestore(fb);
 const T = InkTemplates, R = InkRender;
 
-const S = { me: null, user: null, ws: null, lists: [], author: null, campaigns: [], plans: [], suggestions: [], welcome: null, subs: null, metrics: [], unsub: [], view: '', joinUrl: '' };
+const S = { me: null, user: null, ws: null, lists: [], author: null, campaigns: [], pages: [], plans: [], suggestions: [], welcome: null, subs: null, metrics: [], unsub: [], view: '', joinUrl: '' };
 const $ = (id) => document.getElementById(id);
 const esc = R.escapeHtml;
 const nowIso = () => new Date().toISOString();
@@ -384,7 +453,7 @@ onAuthStateChanged(auth, async (user) => {
 // Load (or re-load) the active list: onboarding if it is not set up yet, otherwise the app.
 async function boot() {
   S.unsub.forEach(u => u()); S.unsub = [];
-  Object.assign(S, { me: null, author: null, campaigns: [], plans: [], suggestions: [], welcome: null, subs: null, metrics: [], joinUrl: '' });
+  Object.assign(S, { me: null, author: null, campaigns: [], pages: [], plans: [], suggestions: [], welcome: null, subs: null, metrics: [], joinUrl: '' });
   let snap;
   try { snap = await getDoc(aDoc()); }
   catch (e) {
@@ -442,7 +511,7 @@ ink.renameList = async (id) => {
 };
 ink.deleteList = async (id) => {
   const l = S.lists.find(x => x.id === id); if (!l || l.isPrimary) return;
-  if (!(await confirmModal('Delete this list?', `<b>${esc(l.name)}</b> and its ${(l.subscriberCount || 0).toLocaleString()} readers will disappear from Ink. Its sign-up page stops working immediately. Ink keeps the data for 30 days in case you change your mind — email support to restore it.`, 'Delete list', true))) return;
+  if (!(await confirmModal('Delete this list?', `<b>${esc(l.name)}</b> and its ${(l.subscriberCount || 0).toLocaleString()} readers will disappear from Ink. Its sign-up page stops working immediately. Ink keeps the data for 30 days in case you change your mind — email <a href="mailto:${SUPPORT_EMAIL}">${SUPPORT_EMAIL}</a> to restore it.`, 'Delete list', true))) return;
   try { await api(`/lists/${id}`, null, 'DELETE'); if (uid() === id) { S.ws = null; rememberList(null); } await loadLists(); if (uid() === S.user.uid) boot(); else render(); toast('List deleted'); } catch (e) { toast(e.message); }
 };
 function planLabel() { return ({ free: 'Free', author: 'Author', pro: 'Pro', studio: 'Studio' })[S.plan] || 'Free'; }
@@ -455,12 +524,130 @@ function renderLists() {
     <p class="small muted" style="margin-top:1rem">Plans: Free — 1 list · Author — 2 · Pro — 5 · Studio — 25. Readers, letters and plans never mix between lists; a reader who joins two of your lists is two separate records, and can unsubscribe from each on its own.</p>`;
 }
 
+// ══════════════════════════════════════════════════════════ landing pages ══
+// A page is a standalone webpage Ink hosts and the author links to themselves (bio link, socials,
+// the back of a book) — either a sign-up page (an opt-in form that adds readers to this list) or a
+// sales page (a headline, some copy, and a single call-to-action button off-site). Pages live in
+// Firestore exactly like letters (authors/{uid}/pages/{id}), edited directly from here; the Worker
+// is only involved to claim the public address and publish (POST /pages/:id/publish|unpublish).
+function pageUrl(p) { return p.slug ? `${PUBLIC()}/p/${p.slug}` : ''; }
+function renderPages() {
+  const rows = (name, f) => { const r = S.pages.filter(f); return r.length ? `<div class="card"><div class="card-head"><h3>${name}</h3><div class="right dim small">${r.length}</div></div><div class="card-body">${r.map(pageRow).join('')}</div></div>` : ''; }
+  const body = S.pages.length ? `${rows('Published', p => p.status === 'published')}${rows('Drafts', p => p.status !== 'published')}` :
+    `<div class="card"><div class="card-body"><div class="empty">No pages yet. A sign-up page gives readers somewhere to land from your bio or socials; a sales page sends them straight to a buy link.</div></div></div>`;
+  $('main').innerHTML = `${head('Pages', 'Standalone pages Ink hosts for you — sign-up pages and book sales pages, styled like your letters.', `<button class="btn btn-primary" onclick="ink.newPage('signup')">＋ Sign-up page</button><button class="btn" onclick="ink.newPage('buy')">＋ Sales page</button>`)}${body}`;
+}
+function pageRow(p) {
+  const url = pageUrl(p);
+  const meta = p.status === 'published' ? `live at ${esc((url).replace(/^https?:\/\//, ''))}${p.views ? ` · ${p.views.toLocaleString()} views` : ''}` : `edited ${fmtDate(p.updatedAt)}`;
+  return `<div class="list-item"><div class="main"><div class="title">${esc(p.headline || p.title || 'Untitled page')}</div><div class="sub">${p.kind === 'signup' ? 'Sign-up page' : 'Sales page'} · ${meta}</div></div><span class="status ${p.status === 'published' ? 'sent' : 'draft'}">${p.status === 'published' ? 'live' : 'draft'}</span><a class="btn btn-sm" href="#page/${p.id}">Open</a></div>`;
+}
+ink.newPage = async (kind) => {
+  const t = nowIso(); const id = rid();
+  const p = { title: kind === 'signup' ? 'New sign-up page' : 'New sales page', kind, status: 'draft', headline: '', body: '', ctaLabel: '', ctaUrl: '', tags: [], coverImage: '', slug: '', views: 0, createdAt: t, updatedAt: t };
+  await setDoc(aDoc('pages', id), p);
+  location.hash = '#page/' + id;
+};
+let pageEditorState = { id: null, dirty: false, saveTimer: null };
+function renderPageEditor(id) {
+  const p = S.pages.find(x => x.id === id);
+  if (!p) { $('main').innerHTML = `${head('Page')}<div class="empty">Loading…</div>`; return; }
+  if (pageEditorState.id === id && document.getElementById('pg-body')) { return; } // keep typing state
+  pageEditorState = { id, dirty: false, saveTimer: null };
+  const live = p.status === 'published';
+  $('main').innerHTML = `
+  ${head(esc(p.title || 'Page'), `<span class="status ${live ? 'sent' : 'draft'}">${live ? 'live' : 'draft'}</span> <span id="pg-save" class="small dim"></span>`, `<a class="btn btn-ghost" href="#pages">← Pages</a><button class="btn btn-danger btn-sm" onclick="ink.deletePage('${id}')">Delete</button>`)}
+  <div class="editor">
+    <div>
+      <div class="card"><div class="card-body">
+        <label>Internal title</label><input type="text" id="pg-title" value="${esc(p.title || '')}">
+        <label>Kind</label><select id="pg-kind" onchange="ink.pageKindChanged('${id}')"><option value="signup" ${p.kind === 'signup' ? 'selected' : ''}>Sign-up page — collects readers into this list</option><option value="buy" ${p.kind === 'buy' ? 'selected' : ''}>Sales page — one button, off-site</option></select>
+        <label>Headline</label><input type="text" id="pg-headline" value="${esc(p.headline || '')}" style="font-family:var(--serif);font-size:1.15rem">
+        <label>Cover image <span class="hint">(optional — full URL)</span></label><input type="text" id="pg-cover" value="${esc(p.coverImage || '')}" placeholder="https://…">
+        <label>Body</label>
+        ${edToolbar('pg-body', { page: true })}
+        <textarea id="pg-body" class="body">${esc(p.body || '')}</textarea>
+        <div id="pg-cta-fields"></div>
+      </div></div>
+      <div class="card"><div class="card-head"><span class="g">✦</span><h3>Publish</h3></div><div class="card-body" id="pg-publish"></div></div>
+    </div>
+    <div>
+      <div class="card"><div class="card-head"><span class="g">◉</span><h3>Preview</h3></div><div class="card-body" style="padding:.5rem"><iframe class="preview-frame" id="pg-frame" title="Page preview"></iframe></div></div>
+    </div>
+  </div>`;
+  renderPageCtaFields(p); renderPagePublish(p);
+  ['pg-title', 'pg-kind', 'pg-headline', 'pg-cover', 'pg-body'].forEach(i => { const el = $(i); if (el) el.addEventListener('input', () => { pageEditorState.dirty = true; $('pg-save').textContent = 'unsaved'; clearTimeout(pageEditorState.saveTimer); pageEditorState.saveTimer = setTimeout(() => savePageEditor(id), 900); updatePagePreview(); }); });
+  updatePagePreview();
+}
+function renderPageCtaFields(p) {
+  const kind = $('pg-kind') ? $('pg-kind').value : p.kind;
+  const el = $('pg-cta-fields'); if (!el) return;
+  if (kind === 'buy') {
+    el.innerHTML = `<label>Button label</label><input type="text" id="pg-cta-label" value="${esc(p.ctaLabel || '')}" placeholder="Get it now">
+      <label>Button link</label><input type="text" id="pg-cta-url" value="${esc(p.ctaUrl || '')}" placeholder="https://…">`;
+  } else {
+    const tags = allTags();
+    el.innerHTML = `<label>Button label</label><input type="text" id="pg-cta-label" value="${esc(p.ctaLabel || '')}" placeholder="Join the list">
+      <label>Tag new readers <span class="hint">(optional — so you can tell them apart later)</span></label><div id="pg-tags">${tags.length ? tags.map(t => `<span class="chip click ${(p.tags || []).includes(t) ? 'on' : ''}" data-tag="${esc(t)}" onclick="ink.togglePageTag(this)">${esc(t)}</span>`).join('') : '<span class="dim small">No tags yet — add them in Readers.</span>'}</div>`;
+  }
+  ['pg-cta-label', 'pg-cta-url'].forEach(i => { const e2 = $(i); if (e2) e2.addEventListener('input', () => { pageEditorState.dirty = true; $('pg-save').textContent = 'unsaved'; clearTimeout(pageEditorState.saveTimer); pageEditorState.saveTimer = setTimeout(() => savePageEditor(pageEditorState.id), 900); updatePagePreview(); }); });
+}
+function renderPagePublish(p) {
+  const el = $('pg-publish'); if (!el) return;
+  const url = pageUrl(p);
+  el.innerHTML = p.status === 'published' ?
+    `<p class="small">Live at <a href="${esc(url)}" target="_blank" rel="noopener">${esc(url.replace(/^https?:\/\//, ''))}</a>${p.views ? ` · ${p.views.toLocaleString()} views` : ''}</p><button class="btn btn-ghost btn-sm" onclick="ink.unpublishPage('${p.id}',this)">Unpublish</button>` :
+    `<label>Page address</label><div class="inline"><span class="dim small">${esc(PUBLIC().replace(/^https?:\/\//, ''))}/p/</span><input type="text" id="pg-slug" value="${esc(p.slug || '')}" placeholder="your-book-title" style="max-width:220px"></div>
+     <button class="btn btn-primary" style="margin-top:.75rem" onclick="ink.publishPage('${p.id}',this)">Publish</button>
+     <div class="msg msg-error" id="pg-err"></div>`;
+}
+ink.pageKindChanged = (id) => { const p = S.pages.find(x => x.id === id); renderPageCtaFields({ ...p, ctaLabel: $('pg-cta-label')?.value, ctaUrl: $('pg-cta-url')?.value }); pageEditorState.dirty = true; $('pg-save').textContent = 'unsaved'; clearTimeout(pageEditorState.saveTimer); pageEditorState.saveTimer = setTimeout(() => savePageEditor(id), 900); updatePagePreview(); };
+ink.togglePageTag = (chip) => { chip.classList.toggle('on'); pageEditorState.dirty = true; $('pg-save').textContent = 'unsaved'; clearTimeout(pageEditorState.saveTimer); pageEditorState.saveTimer = setTimeout(() => savePageEditor(pageEditorState.id), 900); };
+function pageEditorValues() {
+  const kind = $('pg-kind')?.value;
+  return {
+    title: $('pg-title')?.value.trim(), kind, headline: $('pg-headline')?.value.trim(), coverImage: $('pg-cover')?.value.trim(), body: $('pg-body')?.value,
+    ctaLabel: $('pg-cta-label')?.value.trim() || '', ctaUrl: $('pg-cta-url')?.value.trim() || '',
+    tags: kind === 'signup' ? [...document.querySelectorAll('#pg-tags .chip.on')].map(c => c.dataset.tag) : []
+  };
+}
+async function savePageEditor(id) {
+  if (!pageEditorState.dirty || pageEditorState.id !== id) return;
+  const v = pageEditorValues(); if (v.title === undefined) return;
+  pageEditorState.dirty = false;
+  await updateDoc(aDoc('pages', id), { ...v, updatedAt: nowIso() });
+  const el = $('pg-save'); if (el) el.textContent = 'saved';
+}
+function updatePagePreview() {
+  const v = pageEditorValues(); const a = S.author || {}; const f = $('pg-frame'); if (!f) return;
+  const r = R.renderLandingPage({ title: v.title, headline: v.headline, body: v.body, coverImage: v.coverImage, brand: a.brand, author: { penName: a.penName, webUrl: a.webUrl }, kind: v.kind, ctaLabel: v.ctaLabel, ctaUrl: v.ctaUrl });
+  f.srcdoc = r.html;
+}
+ink.publishPage = async (id, btn) => {
+  await savePageEditor(id); // make sure the slug field's siblings (headline/cta) are saved first
+  const slug = $('pg-slug')?.value.trim();
+  busy(btn, true, ''); $('pg-err').textContent = '';
+  try { const r = await api(`/pages/${id}/publish`, { slug }); toast('Page is live.'); } catch (e) { $('pg-err').textContent = e.message; } finally { busy(btn, false); }
+};
+ink.unpublishPage = async (id, btn) => {
+  busy(btn, true, '');
+  try { await api(`/pages/${id}/unpublish`); toast('Unpublished — the old link now shows "not found".'); } catch (e) { toast(e.message); } finally { busy(btn, false); }
+};
+ink.deletePage = async (id) => {
+  if (!(await confirmModal('Delete this page?', 'It cannot be recovered. If it is live, its link stops working immediately.', 'Delete', true))) return;
+  const p = S.pages.find(x => x.id === id);
+  try { if (p && p.status === 'published') await api(`/pages/${id}/unpublish`); } catch (e) { /* best effort — still delete the doc */ }
+  await deleteDoc(aDoc('pages', id));
+  location.hash = '#pages';
+};
+
 function startApp() {
   $('app').classList.add('visible');
   api('/me').then(m => { S.me = m; if (S.view === 'settings' || S.view === 'readers') render(); }).catch(() => { });
   loadSubs().then(() => { if (S.view === 'dashboard') render(); }).catch(() => { });
   S.unsub.push(onSnapshot(aDoc(), s => { S.author = s.data() || {}; $('brand-sub').textContent = S.author.penName || 'Author mailer'; if (S.view === 'dashboard' || S.view === 'settings') render(); }));
   S.unsub.push(onSnapshot(query(aCol('campaigns'), orderBy('updatedAt', 'desc'), limit(300)), s => { S.campaigns = s.docs.map(d => ({ id: d.id, ...d.data() })); if (['dashboard', 'campaigns', 'analytics', 'campaign', 'plan'].includes(S.view)) render(); }));
+  S.unsub.push(onSnapshot(query(aCol('pages'), orderBy('updatedAt', 'desc'), limit(200)), s => { S.pages = s.docs.map(d => ({ id: d.id, ...d.data() })); if (['dashboard', 'pages', 'page'].includes(S.view)) render(); }));
   S.unsub.push(onSnapshot(query(aCol('plans'), orderBy('createdAt', 'desc'), limit(50)), s => { S.plans = s.docs.map(d => ({ id: d.id, ...d.data() })); if (['dashboard', 'plan'].includes(S.view)) render(); }));
   S.unsub.push(onSnapshot(query(aCol('suggestions'), where('status', '==', 'open'), limit(100)), s => { S.suggestions = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')); const n = S.suggestions.length; ['badge-approvals', 'badge-approvals-m'].forEach(id => { $(id).textContent = n; $(id).classList.toggle('hidden', !n); }); if (['dashboard', 'approvals'].includes(S.view)) render(); }));
   S.unsub.push(onSnapshot(aDoc('automations', 'welcome'), s => { S.welcome = s.exists() ? s.data() : null; if (['automations', 'dashboard'].includes(S.view)) render(); }));
@@ -535,7 +722,7 @@ function render() {
   const [view, arg, arg2] = h.split('/');
   S.view = view || 'dashboard';
   document.querySelectorAll('[data-nav]').forEach(a => a.classList.toggle('active', a.dataset.nav === S.view || (S.view === 'campaign' && a.dataset.nav === 'campaigns') || (S.view === 'compose' && a.dataset.nav === 'campaigns')));
-  const views = { dashboard: renderDashboard, approvals: renderApprovals, campaigns: renderCampaigns, campaign: () => renderCampaign(arg), compose: () => startCompose(arg, arg2), plan: () => renderPlan(arg), readers: renderReaders, templates: renderTemplates, automations: renderAutomations, analytics: renderAnalytics, settings: renderSettings, lists: renderLists };
+  const views = { dashboard: renderDashboard, approvals: renderApprovals, campaigns: renderCampaigns, campaign: () => renderCampaign(arg), compose: () => startCompose(arg, arg2), plan: () => renderPlan(arg), readers: renderReaders, templates: renderTemplates, automations: renderAutomations, analytics: renderAnalytics, settings: renderSettings, lists: renderLists, pages: renderPages, page: () => renderPageEditor(arg) };
   (views[S.view] || renderDashboard)();
   if (S.view !== 'campaign') window.scrollTo(0, 0);
 }
@@ -758,46 +945,51 @@ function campaignStatsCard(c) {
 // know the syntax by heart. "Wrap" buttons (bold, italic, link, quote-line) act on a text
 // selection when there is one; every button falls back to inserting a sensible placeholder
 // (auto-selected) when nothing is selected, so the author can just start typing over it.
-function edToolbar() {
+// Every helper below takes the target textarea's element id as its LAST argument (default
+// 'ed-body', the letter editor) so the exact same toolbar and logic also drive the landing-page
+// editor's body field ('pg-body') — see edToolbar(target).
+function edToolbar(target, opts) {
+  const t = target || 'ed-body';
+  const page = !!(opts && opts.page); // landing pages have no per-reader merge fields or unsubscribe link
+  const q = (s) => "'" + t + "'" + (s ? ',' + s : '');
   const fmt = [
-    ['<b>B</b>', 'Bold — wraps the selection in **bold**', "ink.edBold()"],
-    ['<i>I</i>', 'Italic — wraps the selection in *italic*', "ink.edItalic()"],
-    ['H', 'Heading — a section title', "ink.edHeading()"],
-    ['”', 'Quote — an indented, italicized line', "ink.edQuote()"],
-    ['—', 'Divider — a horizontal rule between sections', "ink.edDivider()"],
-    ['≡', 'Bulleted list', "ink.edList()"],
+    ['<b>B</b>', 'Bold — wraps the selection in **bold**', `ink.edBold(${q()})`],
+    ['<i>I</i>', 'Italic — wraps the selection in *italic*', `ink.edItalic(${q()})`],
+    ['H', 'Heading — a section title', `ink.edHeading(${q()})`],
+    ['”', 'Quote — an indented, italicized line', `ink.edQuote(${q()})`],
+    ['—', 'Divider — a horizontal rule between sections', `ink.edDivider(${q()})`],
+    ['≡', 'Bulleted list', `ink.edList(${q()})`],
   ];
   const ins = [
-    ['Link', 'Turn the selection into a clickable link', "ink.edLink()"],
-    ['Button', 'A tappable call-to-action button on its own line', "ink.edButton()"],
-    ['Image', 'Embed an image by URL', "ink.edImage()"],
+    ['Link', 'Turn the selection into a clickable link', `ink.edLink(${q()})`],
+    ['Button', 'A tappable call-to-action button on its own line', `ink.edButton(${q()})`],
+    ['Image', 'Embed an image by URL', `ink.edImage(${q()})`],
   ];
-  const tags = [
-    ["Reader's name", 'Inserts the reader\'s first name — falls back to "friend" if unknown', "ink.edTag('first_name')"],
-    ['Pen name', 'Your pen name', "ink.edTag('pen_name')"],
-    ['Website link', 'Your website URL', "ink.edTag('web_url')"],
-    ['Buy link', 'Your book\'s buy link', "ink.edTag('buy_url')"],
+  const tags = (page ? [] : [["Reader's name", 'Inserts the reader\'s first name — falls back to "friend" if unknown', `ink.edTag('first_name',${q()})`]]).concat([
+    ['Pen name', 'Your pen name', `ink.edTag('pen_name',${q()})`],
+    ['Website link', 'Your website URL', `ink.edTag('web_url',${q()})`],
+    ['Buy link', 'Your book\'s buy link', `ink.edTag('buy_url',${q()})`],
+  ]);
+  const special = page ? [] : [
+    ['Keep-me button', 'One-click "yes, keep me on the list" button — for revival/re-permission letters', `ink.edKeepButton(${q()})`],
+    ['Unsubscribe link', 'An inline unsubscribe link (one is always added to the footer automatically too)', `ink.edUnsubLink(${q()})`],
   ];
-  const special = [
-    ['Keep-me button', 'One-click "yes, keep me on the list" button — for revival/re-permission letters', "ink.edKeepButton()"],
-    ['Unsubscribe link', 'An inline unsubscribe link (one is always added to the footer automatically too)', "ink.edUnsubLink()"],
-  ];
-  const grp = (items) => `<div class="grp">${items.map(([label, title, fn]) => `<button type="button" class="ed-tbtn" title="${esc(title)}" onclick="${fn}">${label}</button>`).join('')}</div>`;
+  const grp = (items) => items.length ? `<div class="grp">${items.map(([label, title, fn]) => `<button type="button" class="ed-tbtn" title="${esc(title)}" onclick="${fn}">${label}</button>`).join('')}</div>` : '';
   return `<div class="ed-toolbar">${grp(fmt)}${grp(ins)}${grp(tags)}${grp(special)}</div>`;
 }
-function edEl() { return $('ed-body'); }
-function edFireInput() { const el = edEl(); if (el) el.dispatchEvent(new Event('input')); }
+function edEl(target) { return $(target || 'ed-body'); }
+function edFireInput(target) { const el = edEl(target); if (el) el.dispatchEvent(new Event('input')); }
 function edFocusRange(el, start, end) { el.focus(); el.setSelectionRange(start, end); }
 /** Replaces the current selection with `text`, then selects the sub-range [selOffset, selOffset+selLen)
  *  within it (defaults to placing the cursor right after the inserted text). */
-function edReplaceSelection(text, selOffset, selLen) {
-  const el = edEl(); if (!el) return;
+function edReplaceSelection(text, selOffset, selLen, target) {
+  const el = edEl(target); if (!el) return;
   const s = el.selectionStart, e = el.selectionEnd, value = el.value;
   el.value = value.slice(0, s) + text + value.slice(e);
   const so = selOffset == null ? text.length : selOffset;
   const sl = selLen == null ? 0 : selLen;
   edFocusRange(el, s + so, s + so + sl);
-  edFireInput();
+  edFireInput(target);
 }
 /** Wraps the selection in `before`/`after` (e.g. ** **). With nothing selected, inserts
  *  before+placeholder+after and selects the placeholder so typing replaces it.
@@ -807,19 +999,19 @@ function edReplaceSelection(text, selOffset, selLen) {
  *  in the first paragraph and another in the last, with nothing to pair against in between.
  *  Wrap every paragraph in the selection separately instead, so it always renders correctly
  *  regardless of how much text is selected. */
-function edWrap(before, after, placeholder) {
-  const el = edEl(); if (!el) return;
+function edWrap(before, after, placeholder, target) {
+  const el = edEl(target); if (!el) return;
   const sel = el.value.slice(el.selectionStart, el.selectionEnd);
-  if (!sel) { edReplaceSelection(before + placeholder + after, before.length, placeholder.length); return; }
+  if (!sel) { edReplaceSelection(before + placeholder + after, before.length, placeholder.length, target); return; }
   const wrapped = sel.split(/(\n{2,})/).map((part, i) => (i % 2 === 1 || !part) ? part : before + part + after).join('');
-  edReplaceSelection(wrapped, 0, wrapped.length);
+  edReplaceSelection(wrapped, 0, wrapped.length, target);
 }
 /** Inserts a block-level template (heading/quote/divider/button/list) AT A POINT — never
  *  deleting anything — padding it with blank lines so it becomes its own paragraph per the
  *  render.js contract, regardless of what's around it. Used for blocks that have no text
  *  slot of their own to absorb a selection into (Divider, the ready-made Keep-me button). */
-function edInsertBlockAt(pos, template, selOffset, selLen) {
-  const el = edEl(); if (!el) return;
+function edInsertBlockAt(pos, template, selOffset, selLen, target) {
+  const el = edEl(target); if (!el) return;
   const value = el.value;
   const before = value.slice(0, pos), after = value.slice(pos);
   const prefix = before === '' ? '' : before.endsWith('\n\n') ? '' : before.endsWith('\n') ? '\n' : '\n\n';
@@ -828,14 +1020,14 @@ function edInsertBlockAt(pos, template, selOffset, selLen) {
   const base = pos + prefix.length;
   const so = selOffset == null ? template.length : selOffset, sl = selLen == null ? 0 : selLen;
   edFocusRange(el, base + so, base + so + sl);
-  edFireInput();
+  edFireInput(target);
 }
 /** Replaces the current selection with a block-level template that the selection has already
  *  been folded into (a heading title, quoted lines, list items) — so the selected text is
  *  never lost, just re-shaped. Pads with blank lines so it lands as its own paragraph.
  *  selOffset/selLen (into `template`) pick what gets selected afterward. */
-function edReplaceWithBlock(template, selOffset, selLen) {
-  const el = edEl(); if (!el) return;
+function edReplaceWithBlock(template, selOffset, selLen, target) {
+  const el = edEl(target); if (!el) return;
   const s = el.selectionStart, e = el.selectionEnd, value = el.value;
   const before = value.slice(0, s), after = value.slice(e);
   const prefix = before === '' ? '' : before.endsWith('\n\n') ? '' : before.endsWith('\n') ? '\n' : '\n\n';
@@ -844,62 +1036,62 @@ function edReplaceWithBlock(template, selOffset, selLen) {
   const base = s + prefix.length;
   const so = selOffset == null ? 0 : selOffset, sl = selLen == null ? template.length : selLen;
   edFocusRange(el, base + so, base + so + sl);
-  edFireInput();
+  edFireInput(target);
 }
 /** For quote/list: turns every line of the current selection into its own "> " or "- " line
  *  (falling back to placeholder lines when nothing is selected), so a whole passage can be
  *  turned into a quote or list in one click without losing a word of it. */
-function edLineBlock(linePrefix, placeholderLines) {
-  const el = edEl(); if (!el) return;
+function edLineBlock(linePrefix, placeholderLines, target) {
+  const el = edEl(target); if (!el) return;
   const sel = el.value.slice(el.selectionStart, el.selectionEnd);
   const lines = sel ? sel.replace(/\n{2,}/g, '\n').split('\n').filter((l) => l.trim() !== '') : [];
   const body = (lines.length ? lines : placeholderLines).map((l) => linePrefix + l).join('\n');
-  edReplaceWithBlock(body, 0, body.length);
+  edReplaceWithBlock(body, 0, body.length, target);
 }
-ink.edBold = () => edWrap('**', '**', 'bold text');
-ink.edItalic = () => edWrap('*', '*', 'italic text');
-ink.edHeading = () => {
-  const el = edEl(); if (!el) return;
+ink.edBold = (target) => edWrap('**', '**', 'bold text', target);
+ink.edItalic = (target) => edWrap('*', '*', 'italic text', target);
+ink.edHeading = (target) => {
+  const el = edEl(target); if (!el) return;
   const sel = el.value.slice(el.selectionStart, el.selectionEnd);
   const text = (sel.replace(/\s*\n+\s*/g, ' ').trim()) || 'Heading';
-  edReplaceWithBlock('## ' + text, 3, text.length);
+  edReplaceWithBlock('## ' + text, 3, text.length, target);
 };
-ink.edQuote = () => edLineBlock('> ', ['Quoted line']);
-ink.edList = () => edLineBlock('- ', ['First item', 'Second item', 'Third item']);
-ink.edDivider = () => { const el = edEl(); if (!el) return; edInsertBlockAt(el.selectionEnd, '---'); };
-ink.edLink = () => {
-  const el = edEl(); if (!el) return;
+ink.edQuote = (target) => edLineBlock('> ', ['Quoted line'], target);
+ink.edList = (target) => edLineBlock('- ', ['First item', 'Second item', 'Third item'], target);
+ink.edDivider = (target) => { const el = edEl(target); if (!el) return; edInsertBlockAt(el.selectionEnd, '---', null, null, target); };
+ink.edLink = (target) => {
+  const el = edEl(target); if (!el) return;
   const sel = el.value.slice(el.selectionStart, el.selectionEnd);
   const text = sel || 'link text';
   const tpl = '[' + text + '](https://)';
-  edReplaceSelection(tpl, tpl.indexOf('](') + 2, 'https://'.length);
+  edReplaceSelection(tpl, tpl.indexOf('](') + 2, 'https://'.length, target);
 };
-ink.edButton = () => {
-  const el = edEl(); if (!el) return;
+ink.edButton = (target) => {
+  const el = edEl(target); if (!el) return;
   const sel = el.value.slice(el.selectionStart, el.selectionEnd);
   const label = (sel.replace(/\s*\n+\s*/g, ' ').trim()) || 'Button label';
   const tpl = '[button: ' + label + '](https://)';
-  edReplaceWithBlock(tpl, tpl.indexOf('](') + 2, 'https://'.length);
+  edReplaceWithBlock(tpl, tpl.indexOf('](') + 2, 'https://'.length, target);
 };
-ink.edImage = () => {
-  const el = edEl(); if (!el) return;
+ink.edImage = (target) => {
+  const el = edEl(target); if (!el) return;
   const sel = el.value.slice(el.selectionStart, el.selectionEnd);
   const alt = (sel.replace(/\s*\n+\s*/g, ' ').trim()) || 'Description of the image';
   const tpl = '![' + alt + '](https://)';
-  edReplaceWithBlock(tpl, tpl.indexOf('](') + 2, 'https://'.length);
+  edReplaceWithBlock(tpl, tpl.indexOf('](') + 2, 'https://'.length, target);
 };
-ink.edTag = (tag) => edReplaceSelection('{{' + tag + '}}');
-ink.edKeepButton = () => {
-  const el = edEl(); if (!el) return;
+ink.edTag = (tag, target) => edReplaceSelection('{{' + tag + '}}', null, null, target);
+ink.edKeepButton = (target) => {
+  const el = edEl(target); if (!el) return;
   const sel = el.value.slice(el.selectionStart, el.selectionEnd);
   const label = (sel.replace(/\s*\n+\s*/g, ' ').trim()) || 'Yes, keep me on the list';
-  edReplaceWithBlock('[button: ' + label + ']({{keep_url}})');
+  edReplaceWithBlock('[button: ' + label + ']({{keep_url}})', null, null, target);
 };
-ink.edUnsubLink = () => {
-  const el = edEl(); if (!el) return;
+ink.edUnsubLink = (target) => {
+  const el = edEl(target); if (!el) return;
   const sel = el.value.slice(el.selectionStart, el.selectionEnd);
   const text = sel || 'unsubscribe';
-  edReplaceSelection('[' + text + ']({{unsubscribe_url}})', 0, ('[' + text + ']({{unsubscribe_url}})').length);
+  edReplaceSelection('[' + text + ']({{unsubscribe_url}})', 0, ('[' + text + ']({{unsubscribe_url}})').length, target);
 };
 
 function editorValues() { return { title: $('ed-title')?.value.trim(), subject: $('ed-subject')?.value.trim(), previewText: $('ed-preview')?.value.trim(), body: $('ed-body')?.value, brief: $('ed-brief')?.value.trim() }; }

@@ -1,11 +1,12 @@
 # Ink deploy canary. Claude rewrites this file after a substantial change; InkWatch (scripts\ink-watch.ps1)
 # notices the new modification time and runs scripts\ink-push.ps1: commit + push, Firestore rules, Worker.
 # subject: becomes the commit subject; everything after body: becomes the commit body.
-last_tick: 2026-09-18T12:05:00Z
-subject: Toolbar: Heading/Quote/Divider/List/Button/Image/Keep-me no longer eat the selection
+last_tick: 2026-09-22T00:00:00Z
+subject: Sales landing pages: marketing home + author page builder
 body:
-- Root cause: those buttons used a fixed template (e.g. "> Quoted line") and inserted it over whatever range was selected, silently discarding the selected text instead of using it.
-- Quote and List now fold every line of the selection into "> "/"- " lines (falling back to placeholder lines only when nothing is selected), so a whole passage becomes a quote or list without losing a word.
-- Heading, Button, Image and the Keep-me button now use the selection as their title/label/alt-text when there is one, instead of ignoring it.
-- Divider has no text slot to absorb a selection into, so it no longer touches the selection at all -- it inserts itself right after the selection, leaving the selected text exactly as it was.
-- Verified all of the above (with and without a selection, single- and multi-line) against the shared renderer before shipping.
+- New signed-out marketing page at ink.jacobsiler.com: hero, feature grid, plan comparison (early access = free), then sign-in -- replaces the bare login box.
+- New "Pages" section in the app: authors build sign-up pages (opt-in form, adds readers to the list) or sales pages (headline + one off-site CTA button), using the same formatting toolbar as letters.
+- shared/render.js gains renderLandingPage() -- reuses the same markdown parser as emails (so the same **bold**/*italic*/etc. all work) but wraps it in a webpage shell instead of an email shell.
+- Worker: GET/POST /p/:slug serves the published page and captures sign-ups; POST /pages/:id/publish|unpublish claims/releases the public slug (a new pageSlugs collection, same pattern as the existing join-page slugs). Page docs themselves are read/written directly from the app like campaigns -- firestore.rules' existing authors/{uid}/{collection} wildcard already covers them; only pageSlugs needed a new rule.
+- Support address ink@jacobsiler.com wired into the marketing footer and the delete-list dialog (forwards to Jacob via Cloudflare Email Routing).
+- Verified: renderLandingPage() output (signup + buy kinds, markdown formatting) with direct Node tests; full JS syntax check on index.html and worker/src/index.js.

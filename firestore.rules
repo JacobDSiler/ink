@@ -833,6 +833,13 @@ service cloud.firestore {
       allow read:  if request.auth != null;
       allow write: if false;
     }
+    // Landing-page slug → {uid, pid} reverse index. Written by the Worker when an author
+    // publishes a page (claims its public address); readable by signed-in users so the
+    // app can show availability while they're picking one.
+    match /pageSlugs/{slug} {
+      allow read:  if request.auth != null;
+      allow write: if false;
+    }
     // Worker-only root collections (service account bypasses rules).
     match /jobs/{id}           { allow read, write: if false; }
     match /jobs/{id}/q/{chunk} { allow read, write: if false; }

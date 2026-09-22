@@ -78,6 +78,26 @@ The plan lives in `authors/{uid}.plan` (Worker-only field). Until billing exists
 have unlimited lists and can set anyone's plan with `POST /admin/plan { uid, plan }`. Deleting a list is a soft delete
 (`deleted: true`, slug released, nudges stopped); the data stays in Firestore.
 
+## Landing pages
+
+Authors can build standalone pages Ink hosts and they link to themselves (bio link, socials, back of a
+book) — a **sign-up page** (an opt-in form that adds readers to the current list) or a **sales page** (a
+headline, some copy, one call-to-action button off-site). Pages are edited in the app exactly like letters,
+using the same formatting toolbar and the same `shared/render.js` markup contract, but render through
+`InkRender.renderLandingPage()` — a webpage shell instead of an email shell — and are served publicly by
+the Worker at `GET /p/:slug` once published. Publishing (`POST /pages/:id/publish {slug}`) is the one thing
+the client can't do itself: it claims the slug in the root-level `pageSlugs` collection (globally unique,
+Worker-only writes) and flips the page's `status` to `published`; `POST /pages/:id/unpublish` releases the
+slug. The page doc itself (`authors/{uid}/pages/{id}`) is created/edited/deleted directly from the app like
+any other subcollection — no dedicated CRUD routes needed.
+
+## Marketing home
+
+Signed-out visitors to ink.jacobsiler.com see a real marketing page (`#auth` in `index.html`) — hero, feature
+grid, a plan comparison (all free during early access; real pricing swaps in once billing exists), then the
+sign-in box. Support/report-an-issue address is `ink@jacobsiler.com` (`SUPPORT_EMAIL` in `index.html`),
+forwarded via Cloudflare Email Routing to Jacob's inbox.
+
 ## Data model (Firestore)
 
 ```
@@ -85,11 +105,12 @@ authors/{uid}                    profile, voice, books, sender settings, brand, 
   subscribers/{sha(email)}       email, name, status, tags, source, opens, clicks, lastOpenAt…
   campaigns/{id}                 subject, body, segment, status, scheduledAt, stats{…}, report
     recipients/{sid}             per-recipient delivery/open/click (Worker-only writes)
+  pages/{id}                     title, kind (signup|buy), status (draft|published), headline, body, ctaLabel, ctaUrl, tags, slug, views
   plans/{id}                     playbookId, anchorDate, items[{dueDate,status,campaignId,brief}]
   suggestions/{id}               the Approvals inbox: drafts, insights, reports
   automations/welcome            enabled, steps[]
   metricsDaily/{yyyy-mm-dd}      subscribed, unsubscribed, opens, clicks, sent
-slugs/{slug} · jobs · schedule · automationRuns · emailIndex   (Worker-only)
+slugs/{slug} · pageSlugs/{slug} · jobs · schedule · automationRuns · emailIndex   (Worker-only)
 ```
 Times are ISO strings. Subscriber ids are the first 20 chars of base64url(sha256(lowercased email)), so imports dedupe naturally.
 
@@ -107,7 +128,8 @@ All authenticated routes accept `X-Ink-List: <listId>` (defaults to the account'
 | `POST /domain` · `POST /domain/verify` · `DELETE /domain` | author's own sending domain via Resend |
 | `GET /deliverability` · `GET /list/health` · `POST /list/prune` | inbox-placement checks, list temperature, archive cold readers |
 | `POST /nudge/run` · `POST /automations/welcome/test` | manual triggers |
-| public: `GET/POST /join/:slug` · `GET /embed.js` · `GET /confirm/:token` · `GET/POST /u/:uid/:sid/:token` · `GET /keep/:uid/:sid/:token` · `GET /o/…` (open pixel) · `GET /r/…` (click redirect) · `GET/POST /approve/:token` · `POST /webhooks/resend` | |
+| `POST /pages/:id/publish {slug}` · `POST /pages/:id/unpublish` | claim/release a landing page's public address |
+| public: `GET/POST /join/:slug` · `GET/POST /p/:slug` (landing page) · `GET /embed.js` · `GET /confirm/:token` · `GET/POST /u/:uid/:sid/:token` · `GET /keep/:uid/:sid/:token` · `GET /o/…` (open pixel) · `GET /r/…` (click redirect) · `GET/POST /approve/:token` · `POST /webhooks/resend` | |
 
 Sends run as resumable jobs (`jobs/{uid}_{cid}`): an engaged-first queue in 4,000-id chunks, 100 per batch, paced for warm-up and the daily budget, continued by the cron. Provider limits or outages pause the job and rewind the batch; already-reached readers are skipped on retry, so nobody gets a letter twice.
 

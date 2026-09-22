@@ -143,6 +143,66 @@
     return { html: html, text: toText(body, author, unsub), subject: subject, previewText: preview };
   }
 
+  /**
+   * renderLandingPage({ title, headline, body, brand, author:{penName, webUrl}, kind:'signup'|'buy',
+   *   ctaLabel, ctaUrl, coverImage, formAction })
+   * A standalone webpage (not an email) — same body markup and brand as renderEmail, wrapped in a
+   * page shell instead of an email shell. `kind: 'signup'` renders a name/email opt-in form that
+   * POSTs (as JSON) to `formAction` (defaults to the current URL, which is what the Worker's public
+   * page route expects); `kind: 'buy'` (the default) renders a single CTA link to `ctaUrl` — for a
+   * book's buy link, a Kickstarter, or anywhere else off-site. Returns { html }.
+   */
+  function renderLandingPage(opts) {
+    var brand = Object.assign({}, DEFAULT_BRAND, opts.brand || {});
+    var author = opts.author || {};
+    var vars = Object.assign({ pen_name: author.penName || '', web_url: author.webUrl || '' }, opts.vars || {});
+    var headline = merge(opts.headline || '', vars);
+    var body = merge(opts.body || '', vars);
+    var content = renderBlocks(body, brand);
+    var kind = opts.kind === 'signup' ? 'signup' : 'buy';
+    var ctaLabel = escapeHtml(opts.ctaLabel || (kind === 'signup' ? 'Join the list' : 'Get it now'));
+    var cover = opts.coverImage ? '<img src="' + escapeHtml(opts.coverImage) + '" alt="" style="max-width:100%;height:auto;display:block;margin:0 auto 1.75em;border-radius:6px;">' : '';
+
+    var ctaBlock;
+    if (kind === 'signup') {
+      var action = opts.formAction ? escapeHtml(opts.formAction) : '';
+      ctaBlock =
+        '<form id="ink-f" onsubmit="return inkGo(event)" style="max-width:380px;margin:2em auto 0;text-align:left">' +
+        '<label style="display:block;font-size:.8rem;letter-spacing:.05em;text-transform:uppercase;color:' + brand.muted + ';margin:0 0 .3em">First name</label>' +
+        '<input id="ink-n" name="name" autocomplete="given-name" placeholder="Optional" style="width:100%;box-sizing:border-box;padding:.8rem 1rem;font-size:1.05rem;font-family:inherit;border:1px solid ' + brand.rule + ';border-radius:4px;margin-bottom:.6rem">' +
+        '<label style="display:block;font-size:.8rem;letter-spacing:.05em;text-transform:uppercase;color:' + brand.muted + ';margin:0 0 .3em">Email</label>' +
+        '<input id="ink-e" name="email" type="email" required autocomplete="email" placeholder="you@example.com" style="width:100%;box-sizing:border-box;padding:.8rem 1rem;font-size:1.05rem;font-family:inherit;border:1px solid ' + brand.rule + ';border-radius:4px">' +
+        '<input type="text" name="website" style="position:absolute;left:-9999px" tabindex="-1" autocomplete="off">' +
+        '<button id="ink-b" type="submit" style="margin-top:1rem;width:100%;padding:.95rem;font-size:1.05rem;font-family:inherit;font-weight:600;background:' + brand.accent + ';color:' + brand.accentText + ';border:0;border-radius:4px;cursor:pointer">' + ctaLabel + '</button>' +
+        '<div id="ink-err" style="color:#b23b2a;font-size:.9rem;margin-top:.5rem;min-height:1.2em"></div>' +
+        '</form>' +
+        '<div id="ink-ok" style="display:none;background:#eef7ee;border:1px solid #c9e4c9;padding:1rem;border-radius:4px;margin-top:1.5rem;max-width:380px;margin-left:auto;margin-right:auto"></div>' +
+        '<script>function inkGo(e){e.preventDefault();var b=document.getElementById("ink-b"),err=document.getElementById("ink-err");b.disabled=true;err.textContent="";' +
+        'fetch(' + (action ? '"' + action + '"' : 'location.pathname') + ',{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email:document.getElementById("ink-e").value,name:document.getElementById("ink-n").value,website:document.querySelector(\'[name=website]\').value})}).then(function(r){return r.json()}).then(function(d){' +
+        'if(!d.ok){err.textContent=d.error||"Something went wrong.";b.disabled=false;return;}' +
+        'document.getElementById("ink-f").style.display="none";var ok=document.getElementById("ink-ok");ok.style.display="block";ok.textContent=d.status==="pending"?"Almost there — check your inbox and click the confirmation link.":"You are in. Welcome!";' +
+        '}).catch(function(){err.textContent="Network error — please try again.";b.disabled=false;});return false;}</' + 'script>';
+    } else {
+      var ctaUrl = opts.ctaUrl || '#';
+      ctaBlock = '<div style="text-align:center;margin-top:2em"><a href="' + escapeHtml(ctaUrl) + '" style="display:inline-block;padding:1rem 2.5rem;font-family:' + brand.font + ';font-size:1.1rem;letter-spacing:.03em;color:' + brand.accentText + ';background:' + brand.accent + ';text-decoration:none;font-weight:600;border-radius:4px;">' + ctaLabel + '</a></div>';
+    }
+
+    var html = '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">' +
+      '<title>' + escapeHtml(opts.title || headline || 'Ink') + '</title></head>' +
+      '<body style="margin:0;padding:0;background:' + brand.bg + ';font-family:' + brand.font + ';">' +
+      '<div style="max-width:640px;margin:0 auto;padding:6vh 1.5rem 8vh;">' +
+      (author.penName ? '<div style="text-align:center;font-size:.8rem;letter-spacing:.18em;text-transform:uppercase;color:' + brand.muted + ';margin-bottom:1.5rem">' + escapeHtml(author.penName) + '</div>' : '') +
+      cover +
+      (headline ? '<h1 style="font-family:' + brand.font + ';font-size:2rem;font-weight:600;line-height:1.25;margin:0 0 1em;color:' + brand.heading + ';text-align:center;">' + escapeHtml(headline) + '</h1>' : '') +
+      content +
+      ctaBlock +
+      '</div>' +
+      '<p style="text-align:center;font-size:.75rem;color:' + brand.muted + ';padding-bottom:4vh">Powered by <a href="https://ink.jacobsiler.com" style="color:inherit">Ink</a></p>' +
+      '</body></html>';
+
+    return { html: html };
+  }
+
   function toText(body, author, unsub) {
     var t = String(body || '')
       .replace(/!\[([^\]]*)\]\((https?:\/\/[^)\s]+)\)/g, '$2')
@@ -154,5 +214,5 @@
     return t + foot;
   }
 
-  root.InkRender = { renderEmail: renderEmail, toText: toText, merge: merge, escapeHtml: escapeHtml, DEFAULT_BRAND: DEFAULT_BRAND, firstName: firstName };
+  root.InkRender = { renderEmail: renderEmail, renderLandingPage: renderLandingPage, toText: toText, merge: merge, escapeHtml: escapeHtml, DEFAULT_BRAND: DEFAULT_BRAND, firstName: firstName };
 })(typeof globalThis !== 'undefined' ? globalThis : typeof self !== 'undefined' ? self : this);
